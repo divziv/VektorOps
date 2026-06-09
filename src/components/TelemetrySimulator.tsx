@@ -398,25 +398,25 @@ export function TelemetrySimulator() {
   };
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+    <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 select-text">
       {/* Simulation Console Controls (Left hand) */}
       <div className="xl:col-span-4 flex flex-col space-y-6">
-        <div className="bg-[#0f172a] border border-slate-800 rounded-xl p-5 space-y-5 shadow-xl">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="bg-white border-4 border-[#141414] p-5 space-y-5 shadow-[4px_4px_0px_#141414]">
+          <div className="flex items-center justify-between border-b-2 border-[#141414] pb-3">
             <div className="flex items-center space-x-2.5">
-              <Sliders className="w-5 h-5 text-teal-400" />
-              <h3 className="font-semibold text-slate-100 text-sm tracking-wide uppercase">Pipeline Settings</h3>
+              <Sliders className="w-5 h-5 text-red-650" />
+              <h3 className="font-extrabold text-[#141414] text-xs font-mono tracking-wider uppercase">Pipeline Settings</h3>
             </div>
-            <span className="text-[10px] uppercase tracking-wider font-mono bg-teal-950 text-teal-400 border border-teal-800 px-2.5 py-0.5 rounded-full font-bold">
-              Simulator Active
+            <span className="text-[10px] uppercase tracking-wider font-mono bg-[#141414] text-[#E4E3E0] border-2 border-[#141414] px-2.5 py-0.5 font-bold">
+              Simulator Live
             </span>
           </div>
 
           {/* Active Tenant Context Setting */}
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-slate-400 flex items-center justify-between">
+            <label className="text-xs font-bold text-[#141414] flex items-center justify-between font-mono uppercase">
               <span>Active Tenant Session Context Tokens</span>
-              <span className="text-[10px] font-mono text-slate-500 font-normal">Locks Mcp credentials</span>
+              <span className="text-[9px] font-mono text-slate-500 font-normal">Locks credential store</span>
             </label>
             <div className="grid grid-cols-3 gap-2">
               {["TENANT-ALPHA", "TENANT-BETA", "TENANT-GAMMA"].map((tenant) => (
@@ -426,10 +426,10 @@ export function TelemetrySimulator() {
                     setActiveTenant(tenant);
                     addTrace(`[SECURITY] Context token swapped. Token: '${tenant}' Active Session.`);
                   }}
-                  className={`text-xs px-2 py-2 rounded-lg font-mono border transition-all ${
+                  className={`text-xs px-2 py-2 font-mono border-2 font-bold transition-all ${
                     activeTenant === tenant
-                      ? "bg-teal-500/20 text-teal-300 border-teal-500"
-                      : "bg-slate-900/60 text-slate-400 border-slate-800/80 hover:text-slate-200"
+                      ? "bg-[#141414] text-white border-[#141414] shadow-[1px_1px_0px_#141414]"
+                      : "bg-white text-slate-700 border-slate-300 hover:border-[#141414] hover:text-[#141414]"
                   }`}
                 >
                   {tenant.replace("TENANT-", "")}
@@ -441,11 +441,11 @@ export function TelemetrySimulator() {
           {/* Stream settings */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs text-slate-400 font-semibold">Ticking Interval</label>
+              <label className="text-xs text-[#141414] font-bold font-mono uppercase">Ticking Interval</label>
               <select
                 value={speedMs}
                 onChange={(e) => setSpeedMs(Number(e.target.value))}
-                className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-lg px-3 py-2 outline-none focus:border-teal-500 font-mono"
+                className="w-full bg-white border-2 border-[#141414] text-[#141414] text-xs p-2 outline-none font-mono font-bold"
               >
                 <option value={1000}>1.0s (Live)</option>
                 <option value={2000}>2.0s (Normal)</option>
@@ -454,10 +454,10 @@ export function TelemetrySimulator() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs text-slate-400 font-semibold">Buffered Package Queue</label>
-              <div className="text-sm font-mono text-slate-300 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 flex items-center justify-between">
+              <label className="text-xs text-[#141414] font-bold font-mono uppercase">Queue Buffer</label>
+              <div className="text-sm font-mono text-[#141414] bg-[#E4E3E0] border-2 border-[#141414] p-2 flex items-center justify-between font-extrabold">
                 <span>{streamIndex} / {logs.length}</span>
-                <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                <span className="w-2.5 h-2.5 bg-red-650 inline-block animate-pulse" />
               </div>
             </div>
           </div>
@@ -470,7 +470,7 @@ export function TelemetrySimulator() {
                   setIsPlaying(false);
                   addTrace("[SYSTEM] Stream processing paused by master technician.");
                 }}
-                className="flex-1 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-600/40 rounded-lg py-2 text-xs font-semibold flex items-center justify-center space-x-2 transition"
+                className="flex-1 bg-amber-500 hover:bg-amber-600 text-[#141414] border-2 border-[#141414] py-2 text-xs font-bold font-mono flex items-center justify-center space-x-2 transition shadow-[2px_2px_0px_#141414] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
               >
                 <Pause className="w-3.5 h-3.5" />
                 <span>Pause Telemetry</span>
@@ -482,17 +482,17 @@ export function TelemetrySimulator() {
                   setIsPlaying(true);
                   addTrace("[SYSTEM] Starting async telemetry pipeline stream.");
                 }}
-                className="flex-1 bg-teal-500 hover:bg-teal-600 text-slate-950 rounded-lg py-2 text-xs font-bold flex items-center justify-center space-x-2 transition shadow-lg shadow-teal-500/10"
+                className="flex-1 bg-[#141414] hover:bg-slate-800 text-white border-2 border-[#141414] py-2 text-xs font-black font-mono flex items-center justify-center space-x-2 transition shadow-[2px_2px_0px_#141414] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
               >
                 <Play className="w-3.5 h-3.5" />
-                <span>Start Telemetry Stream</span>
+                <span>Start Stream</span>
               </button>
             )}
 
             <button
               onClick={processNextLog}
               disabled={isPlaying || streamIndex >= logs.length}
-              className="px-3.5 bg-slate-900 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700 disabled:opacity-40 rounded-lg text-xs font-semibold flex items-center justify-center transition"
+              className="px-3.5 bg-white text-[#141414] border-2 border-[#141414] disabled:opacity-40 text-xs font-bold flex items-center justify-center transition shadow-[2px_2px_0px_#141414] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
               title="Forward Ingestion Step"
             >
               <RefreshCw className="w-3.5 h-3.5" />
@@ -500,7 +500,7 @@ export function TelemetrySimulator() {
 
             <button
               onClick={resetSimulator}
-              className="px-3.5 bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800 hover:border-slate-700 rounded-lg text-xs font-semibold flex items-center justify-center transition"
+              className="px-3.5 bg-white text-[#141414] border-2 border-[#141414] text-xs font-bold flex items-center justify-center transition shadow-[2px_2px_0px_#141414] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
               title="Reset Database Parameters"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -509,28 +509,28 @@ export function TelemetrySimulator() {
         </div>
 
         {/* Manual Inject Form */}
-        <div className="bg-[#0f172a] border border-slate-800 rounded-xl p-5 space-y-4 shadow-xl">
-          <div className="flex items-center space-x-2 border-b border-slate-800 pb-2.5">
-            <Cpu className="w-4 h-4 text-cyan-400" />
-            <h4 className="font-semibold text-slate-200 text-xs tracking-wider uppercase">Direct Inject Injector</h4>
+        <div className="bg-white border-4 border-[#141414] p-5 space-y-4 shadow-[4px_4px_0px_#141414]">
+          <div className="flex items-center space-x-2 border-b-2 border-[#141414] pb-2.5">
+            <Cpu className="w-4 h-4 text-red-650" />
+            <h4 className="font-extrabold text-[#141414] text-xs font-mono tracking-widest uppercase">Direct Inject Injector</h4>
           </div>
 
           <form onSubmit={forceInjectCustomLog} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-[10px] font-semibold text-slate-400">Target Core Node</label>
+                <label className="text-[10px] font-bold text-slate-700 uppercase font-mono">Target Core Node</label>
                 <input
                   type="text"
                   name="deviceId"
                   placeholder="CPU-INTEL-SK-10"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 outline-none focus:border-teal-500 font-mono"
+                  className="w-full bg-white border-2 border-[#141414] px-2.5 py-1.5 text-xs text-[#141414] outline-none font-mono font-bold"
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-[10px] font-semibold text-slate-400">Assigned Tenant</label>
+                <label className="text-[10px] font-bold text-slate-700 uppercase font-mono">Assigned Tenant</label>
                 <select
                   name="tenantId"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-300 outline-none focus:border-teal-500 font-mono"
+                  className="w-full bg-white border-2 border-[#141414] px-2 py-1.5 text-xs text-[#141414] outline-none font-mono font-bold"
                 >
                   <option value="TENANT-ALPHA">ALPHA</option>
                   <option value="TENANT-BETA">BETA</option>
@@ -541,10 +541,10 @@ export function TelemetrySimulator() {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-[10px] font-semibold text-slate-400">Register Code</label>
+                <label className="text-[10px] font-bold text-slate-700 uppercase font-mono">Register Code</label>
                 <select
                   name="registerErrorCode"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-300 outline-none focus:border-teal-500 font-mono"
+                  className="w-full bg-white border-2 border-[#141414] px-2 py-1.5 text-xs text-[#141414] outline-none font-mono font-bold"
                 >
                   <option value="0xERR_77B">0xERR_77B</option>
                   <option value="0xERR_A4F">0xERR_A4F</option>
@@ -552,21 +552,21 @@ export function TelemetrySimulator() {
                 </select>
               </div>
               <div className="space-y-1">
-                <label className="text-[10px] font-semibold text-slate-400">Telemetry Hex Dump</label>
+                <label className="text-[10px] font-bold text-slate-700 uppercase font-mono">Telemetry Hex Dump</label>
                 <input
                   type="text"
                   name="hexDump"
                   placeholder="0xCCBB998822FF"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 outline-none focus:border-teal-500 font-mono"
+                  className="w-full bg-white border-2 border-[#141414] px-2.5 py-1.5 text-xs text-[#141414] outline-none font-mono font-bold"
                 />
               </div>
             </div>
 
             <button
               type="submit"
-              className="w-full bg-slate-800 text-slate-200 hover:text-white border border-slate-700 hover:bg-slate-750 transition rounded-lg py-2 text-xs font-bold font-mono tracking-wider flex items-center justify-center space-x-2"
+              className="w-full bg-[#141414] text-white hover:bg-slate-800 transition py-2 text-xs font-black font-mono tracking-wider flex items-center justify-center space-x-2 shadow-[2px_2px_0px_#141414] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none font-mono uppercase"
             >
-              <Send className="w-3 h-3 text-cyan-400" />
+              <Send className="w-3 h-3 text-red-500" />
               <span>INJECT INTO ACTIVE PIPELINE</span>
             </button>
           </form>
@@ -576,21 +576,21 @@ export function TelemetrySimulator() {
       {/* Center Console: Stream Table & Log list + Real-Time Telemetry Traces (Middle panel) */}
       <div className="xl:col-span-4 flex flex-col space-y-6">
         {/* Streamed Logs Ingress Queue */}
-        <div className="bg-[#0f172a] border border-slate-800 rounded-xl p-5 flex-1 flex flex-col h-[340px] shadow-xl">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+        <div className="bg-white border-4 border-[#141414] p-5 flex-1 flex flex-col h-[340px] shadow-[4px_4px_0px_#141414]">
+          <div className="flex items-center justify-between border-b-2 border-[#141414] pb-3 mb-3">
             <div className="flex items-center space-x-2">
-              <Network className="w-4.5 h-4.5 text-teal-400" />
-              <h4 className="font-semibold text-slate-100 text-sm uppercase tracking-wide">Processed Incidents</h4>
+              <Network className="w-4.5 h-4.5 text-red-650" />
+              <h4 className="font-extrabold text-[#141414] text-sm font-mono uppercase tracking-wide">Processed Incidents</h4>
             </div>
-            <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-mono font-bold">
+            <span className="text-[10px] bg-[#E4E3E0] text-[#141414] border border-[#141414] px-2 py-0.5 font-mono font-bold">
               {processedLogs.length} total
             </span>
           </div>
 
           <div className="flex-1 overflow-auto space-y-2.5 pr-1">
             {processedLogs.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-500 text-xs py-8 space-y-2">
-                <Server className="w-10 h-10 text-slate-700 animate-pulse" />
+              <div className="h-full flex flex-col items-center justify-center text-slate-550 text-xs py-8 space-y-2">
+                <Server className="w-10 h-10 text-slate-400" />
                 <span>Ingest a hardware telemetry stream to generate incident logs</span>
               </div>
             ) : (
@@ -603,42 +603,42 @@ export function TelemetrySimulator() {
                   <button
                     key={index}
                     onClick={() => setSelectedPayload(payload)}
-                    className={`w-full text-left p-3 rounded-lg border transition-all flex items-start space-x-3 ${
+                    className={`w-full text-left p-3 border-2 transition-all flex items-start space-x-3 rounded-none ${
                       isSelected 
                         ? isViolation 
-                          ? "bg-red-950/25 border-red-500/80 ring-1 ring-red-500/30"
-                          : "bg-teal-950/25 border-teal-500/80 ring-1 ring-teal-500/30"
+                          ? "bg-red-50 border-red-600 ring-2 ring-red-600"
+                          : "bg-[#E4E3E0] border-[#141414] ring-2 ring-[#141414]"
                         : isViolation 
-                          ? "bg-slate-900/40 border-red-950 hover:bg-slate-800/40 text-red-100"
-                          : "bg-slate-900/60 border-slate-800/50 hover:bg-slate-800/40 text-slate-100"
+                          ? "bg-red-55 border-red-200 hover:bg-red-100/35 text-red-950"
+                          : "bg-white border-slate-300 hover:border-[#141414] text-[#141414]"
                     }`}
                   >
                     <div className="mt-0.5 shrink-0">
                       {isViolation ? (
-                        <ShieldAlert className="w-4 h-4 text-red-500" />
+                        <ShieldAlert className="w-4 h-4 text-red-600" />
                       ) : payload.complianceStatus === "OUT_OF_WARRANTY_COMPLIANCE" ? (
-                        <AlertTriangle className="w-4 h-4 text-amber-500" />
+                        <AlertTriangle className="w-4 h-4 text-amber-600" />
                       ) : (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                       )}
                     </div>
                     
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="font-mono text-xs font-bold tracking-tight text-slate-200">
+                        <span className="font-mono text-xs font-extrabold tracking-tight text-[#141414]">
                           {payload.alert.registerErrorCode}
                         </span>
                         <span className="text-[9px] text-slate-500">
                           {new Date(payload.alert.telemetryTimestamp).toLocaleTimeString()}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-400 font-mono truncate">{payload.alert.deviceId}</p>
+                      <p className="text-xs text-slate-700 font-mono truncate">{payload.alert.deviceId}</p>
                       
                       <div className="flex items-center space-x-2 mt-1.5">
                         <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${
                           isViolation 
-                            ? "bg-red-500/10 text-red-400 border border-red-500/20"
-                            : "bg-teal-500/10 text-teal-400 border border-teal-500/20"
+                            ? "bg-red-600 text-white border-[#141414]"
+                            : "bg-[#141414] text-white border-[#141414]"
                         }`}>
                           {payload.alert.nodeTenantId}
                         </span>
@@ -655,23 +655,23 @@ export function TelemetrySimulator() {
         </div>
 
         {/* Telemetry Tracing Console Terminal (C# logger) */}
-        <div className="bg-[#0b0f19] border border-slate-900 rounded-xl p-5 flex flex-col h-[280px] shadow-2xl">
-          <div className="flex items-center justify-between border-b border-slate-900 pb-2.5 mb-2.5">
+        <div className="bg-[#141414] border-4 border-[#141414] p-5 flex flex-col h-[280px] shadow-[4px_4px_0px_#141414] text-[#E4E3E0]">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 mb-2.5">
             <div className="flex items-center space-x-2">
-              <Terminal className="w-4 h-4 text-slate-500" />
-              <h4 className="font-semibold text-xs text-slate-400 uppercase tracking-widest font-mono">
+              <Terminal className="w-4 h-4 text-slate-400" />
+              <h4 className="font-black text-xs text-[#E4E3E0] uppercase tracking-widest font-mono">
                 System Telemetry Traces
               </h4>
             </div>
             <button
               onClick={() => setTraces([])}
-              className="text-[10px] text-slate-500 hover:text-slate-300 font-mono uppercase bg-slate-950 px-2 py-0.5 rounded border border-slate-900"
+              className="text-[10px] text-slate-400 hover:text-slate-200 font-mono uppercase bg-black px-2 py-0.5 rounded border border-slate-800"
             >
               Clear Console
             </button>
           </div>
 
-          <div className="flex-1 overflow-auto font-mono text-[11px] leading-relaxed select-text text-slate-300 bg-black/40 border border-slate-950 p-3 rounded-lg flex flex-col space-y-1 w-full max-w-full">
+          <div className="flex-1 overflow-auto font-mono text-[10px] leading-relaxed select-text text-slate-300 bg-black/40 border border-slate-950 p-3 rounded-lg flex flex-col space-y-1 w-full max-w-full">
             {traces.length === 0 ? (
               <span className="text-slate-600 italic">No traces captured yet. Waiting for pipeline execution triggers...</span>
             ) : (
@@ -680,9 +680,9 @@ export function TelemetrySimulator() {
                 if (trace.includes("[EXCEPTION")) colorClass = "text-red-400 font-bold bg-red-950/20";
                 else if (trace.includes("[GUARDRAIL CRITICAL")) colorClass = "text-red-400 font-bold";
                 else if (trace.includes("[GUARDRAIL]")) colorClass = "text-slate-400";
-                else if (trace.includes("[FOUNDRY IQ]")) colorClass = "text-teal-300";
+                else if (trace.includes("[FOUNDRY IQ]")) colorClass = "text-teal-350";
                 else if (trace.includes("[INGESTION]")) colorClass = "text-cyan-400";
-                else if (trace.includes("[SECURITY]")) colorClass = "text-emerald-400";
+                else if (trace.includes("[SECURITY]")) colorClass = "text-emerald-405";
                 else if (trace.includes("[CARD ENGINE]")) colorClass = "text-pink-400";
                 
                 return (
@@ -699,15 +699,15 @@ export function TelemetrySimulator() {
 
       {/* Target Render Panel: Copilot Card and Raw JSON Payload (Right hand side) */}
       <div className="xl:col-span-4 flex flex-col space-y-6">
-        <div className="bg-[#0f172a] border border-slate-800 rounded-xl p-5 flex-1 flex flex-col min-h-[640px] shadow-xl">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+        <div className="bg-white border-4 border-[#141414] p-5 flex-1 flex flex-col min-h-[640px] shadow-[4px_4px_0px_#141414]">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
             <div className="flex items-center space-x-2.5">
-              <Shield className="w-5 h-5 text-teal-400" />
-              <h3 className="font-semibold text-slate-100 text-sm tracking-wide uppercase">C# CEA Engine Outputs</h3>
+              <Shield className="w-5 h-5 text-red-650" />
+              <h3 className="font-extrabold text-[#141414] text-sm tracking-wide uppercase font-mono">C# CEA Engine Outputs</h3>
             </div>
             {selectedPayload && (
-              <div className="flex items-center space-x-1 bg-slate-900 border border-slate-800 px-2.5 py-0.5 rounded-md">
-                <span className="text-[10px] font-mono text-slate-400">
+              <div className="flex items-center space-x-1 bg-[#141414] text-[#E4E3E0] px-2.5 py-0.5 border border-black font-semibold font-mono text-[9px]">
+                <span>
                   Time: {selectedPayload.processingTimeMs.toFixed(1)} μs
                 </span>
               </div>
@@ -716,8 +716,8 @@ export function TelemetrySimulator() {
 
           {!selectedPayload ? (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-500 text-xs space-y-3">
-              <Eye className="w-12 h-12 text-slate-700" />
-              <span className="text-center font-sans">
+              <Eye className="w-12 h-12 text-[#141414]" />
+              <span className="text-center font-mono uppercase text-[10px] tracking-wider leading-relaxed text-slate-700">
                 Select or process an incident in the list to inspect generated Adaptive Cards and telemetry JSON strings.
               </span>
             </div>
@@ -725,17 +725,17 @@ export function TelemetrySimulator() {
             <div className="flex-1 flex flex-col space-y-5 min-h-0">
               {/* Dynamic M365 Adaptive Card Visual Renderer Preview */}
               <div className="space-y-2">
-                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest font-mono">
+                <div className="text-[10px] text-slate-700 font-extrabold uppercase tracking-widest font-mono font-bold uppercase tracking-widest font-mono">
                   M365 Copilot Adaptive Card Render
                 </div>
 
                 {selectedPayload.complianceStatus === "SECURITY_VIOLATION_BLOCKED" ? (
-                  <div className="bg-red-950/15 border border-red-500/40 rounded-xl p-5 text-slate-100 flex flex-col space-y-3">
-                    <div className="flex items-center space-x-2 text-red-500">
-                      <ShieldAlert className="w-5 h-5" />
-                      <span className="font-bold text-sm uppercase tracking-wide">Boundary Violation Thrown!</span>
+                  <div className="bg-red-50 border-4 border-red-650 p-5 text-red-950 flex flex-col space-y-3">
+                    <div className="flex items-center space-x-2 text-red-600">
+                      <ShieldAlert className="w-5 h-5 font-black" />
+                      <span className="font-bold text-xs uppercase tracking-wide font-mono">Boundary Violation Thrown!</span>
                     </div>
-                    <p className="text-xs text-red-300/90 font-mono leading-relaxed bg-red-950/40 p-3 rounded-lg border border-red-500/10">
+                    <p className="text-xs text-red-900 font-mono font-bold leading-relaxed bg-white border border-[#141414] p-3 shadow-[2px_2px_0px_#141414]">
                       {selectedPayload.exceptionThrown}
                     </p>
                     <div className="text-[10px] text-slate-500 leading-relaxed font-sans">
@@ -743,61 +743,61 @@ export function TelemetrySimulator() {
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-slate-950 rounded-xl border border-slate-800/80 overflow-hidden shadow-2xl flex flex-col">
+                  <div className="bg-[#E4E3E0] border-4 border-[#141414] flex flex-col shadow-[4px_4px_0px_#141414]">
                     {/* Header (Emphasis block) */}
-                    <div className={`p-4 ${
+                    <div className={`p-4 border-b-2 border-[#141414] ${
                       selectedPayload.complianceStatus === "OUT_OF_WARRANTY_COMPLIANCE"
-                        ? "bg-amber-950/20 border-b border-amber-500/20"
-                        : "bg-slate-900 border-b border-slate-800"
+                        ? "bg-amber-300/30"
+                        : "bg-white"
                     }`}>
                       <div className="flex items-center justify-between mb-1">
-                        <span className={`text-[10px] uppercase font-mono tracking-wider font-bold px-2 py-0.5 rounded ${
+                        <span className={`text-[10px] uppercase font-mono tracking-wider font-bold px-2 py-0.5 border ${
                           selectedPayload.complianceStatus === "OUT_OF_WARRANTY_COMPLIANCE"
-                            ? "bg-red-500/10 text-red-400"
-                            : "bg-amber-500/10 text-amber-400"
+                            ? "bg-red-600 text-white border-red-600"
+                            : "bg-[#141414] text-white border-[#141414]"
                         }`}>
                           {selectedPayload.complianceStatus === "OUT_OF_WARRANTY_COMPLIANCE" ? "Attention Required" : "Diagnostic Advisory"}
                         </span>
                         <span className="text-[9px] text-slate-500 font-mono">v1.5 Adaptive</span>
                       </div>
                       
-                      <h4 className="text-sm font-bold text-slate-100 tracking-tight">
+                      <h4 className="text-sm font-bold text-slate-100 tracking-tight text-[#141414] font-mono uppercase mt-1">
                         VEKTOROPS TELEMETRY ALERT: {selectedPayload.alert.registerErrorCode}
                       </h4>
-                      <p className="text-[11px] text-slate-400 font-mono mt-1">
+                      <p className="text-[11px] text-slate-450 font-mono mt-1 font-bold col-brand-dark">
                         DEVICE: {selectedPayload.alert.deviceId} | TENANT: {selectedPayload.alert.nodeTenantId}
                       </p>
                     </div>
 
                     {/* Body contents */}
-                    <div className="p-4 space-y-4">
+                    <div className="p-4 space-y-4 bg-white border-b-2 border-[#141414]">
                       {/* Register Diagnosis */}
                       <div className="space-y-2">
-                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                        <div className="text-[10px] text-slate-705 font-bold uppercase tracking-wider font-mono">
                           Foundry IQ Register Diagnosis
                         </div>
-                        <div className="bg-slate-900/60 p-3 rounded-lg border border-slate-800/30 text-xs space-y-2">
-                          <div className="grid grid-cols-12 gap-1 pb-1 border-b border-slate-800/40">
-                            <span className="col-span-4 text-slate-500 font-medium">Mapped Register</span>
-                            <span className="col-span-8 text-teal-300 font-mono font-bold truncate">
+                        <div className="bg-slate-50 p-3 border border-[#141414] text-xs space-y-2 font-mono shadow-[2px_2px_0px_#141414]">
+                          <div className="grid grid-cols-12 gap-1 pb-1 border-b border-[#141414]/10">
+                            <span className="col-span-4 text-slate-500 font-bold">Mapped Register</span>
+                            <span className="col-span-8 text-teal-600 font-mono font-bold truncate">
                               {selectedPayload.matchedRegister.registerName}
                             </span>
                           </div>
-                          <div className="grid grid-cols-12 gap-1 pb-1 border-b border-slate-800/40">
-                            <span className="col-span-4 text-slate-500 font-medium">Failing Bit Index</span>
-                            <span className="col-span-8 text-slate-300 font-mono">
+                          <div className="grid grid-cols-12 gap-1 pb-1 border-b border-[#141414]/10">
+                            <span className="col-span-4 text-slate-500 font-bold">Failing Bit Index</span>
+                            <span className="col-span-8 text-slate-800 font-bold">
                               Bit {selectedPayload.matchedRegister.failingBit} of 32
                             </span>
                           </div>
-                          <div className="grid grid-cols-12 gap-1 pb-1 border-b border-slate-800/40">
-                            <span className="col-span-4 text-slate-500 font-medium">Silicon Domain</span>
-                            <span className="col-span-8 text-slate-300 font-medium">
+                          <div className="grid grid-cols-12 gap-1 pb-1 border-b border-[#141414]/10">
+                            <span className="col-span-4 text-slate-500 font-bold">Silicon Domain</span>
+                            <span className="col-span-8 text-slate-700 font-bold">
                               {selectedPayload.matchedRegister.hardwareLevel}
                             </span>
                           </div>
                           <div className="grid grid-cols-12 gap-1">
-                            <span className="col-span-4 text-slate-500 font-medium">Description</span>
-                            <span className="col-span-8 text-slate-300 leading-relaxed">
+                            <span className="col-span-4 text-slate-500 font-bold">Description</span>
+                            <span className="col-span-8 text-slate-800 leading-normal font-sans text-xs">
                               {selectedPayload.matchedRegister.description}
                             </span>
                           </div>
@@ -806,35 +806,35 @@ export function TelemetrySimulator() {
 
                       {/* Compliance & SLA Bounds */}
                       <div className="space-y-2">
-                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                        <div className="text-[10px] text-slate-705 font-bold uppercase tracking-wider font-mono">
                           Compliance & Lifecycle Bounds
                         </div>
-                        <div className="bg-slate-900/30 p-3 rounded-lg border border-slate-850 text-xs space-y-2">
-                          <div className="grid grid-cols-12 gap-1 pb-1 border-b border-slate-800/40">
-                            <span className="col-span-4 text-slate-500 font-medium">SLA Target Limit</span>
-                            <span className="col-span-8 text-white font-mono font-semibold">
+                        <div className="bg-slate-55 p-3 border border-[#141414] text-xs space-y-2 font-mono shadow-[2px_2px_0px_#141414]">
+                          <div className="grid grid-cols-12 gap-1 pb-1 border-b border-[#141414]/10">
+                            <span className="col-span-4 text-slate-500 font-bold">SLA Target Limit</span>
+                            <span className="col-span-8 text-slate-900 font-bold">
                               {selectedPayload.slaMatched.responseTimeThresholdHours} Hours (Max Response)
                             </span>
                           </div>
-                          <div className="grid grid-cols-12 gap-1 pb-1 border-b border-slate-800/40">
-                            <span className="col-span-4 text-slate-500 font-medium">Expiration Contract</span>
-                            <span className="col-span-8 text-slate-300 font-mono">
+                          <div className="grid grid-cols-12 gap-1 pb-1 border-b border-[#141414]/10">
+                            <span className="col-span-4 text-slate-500 font-bold">Expiration Contract</span>
+                            <span className="col-span-8 text-[#141414] font-bold">
                               {selectedPayload.slaMatched.expirationDate}
                             </span>
                           </div>
-                          <div className="grid grid-cols-12 gap-1 pb-1 border-b border-slate-800/40">
-                            <span className="col-span-4 text-slate-500 font-medium">System Compliance</span>
-                            <span className={`col-span-8 font-semibold uppercase ${
+                          <div className="grid grid-cols-12 gap-1 pb-1 border-b border-[#141414]/10">
+                            <span className="col-span-4 text-slate-500 font-bold">System Compliance</span>
+                            <span className={`col-span-8 font-black uppercase ${
                               selectedPayload.complianceStatus === "OUT_OF_WARRANTY_COMPLIANCE"
-                                ? "text-red-400"
-                                : "text-emerald-400"
+                                ? "text-red-650"
+                                : "text-emerald-750"
                             }`}>
                               {selectedPayload.complianceStatus.replace(/_/g, " ")}
                             </span>
                           </div>
                           <div className="grid grid-cols-12 gap-1">
-                            <span className="col-span-4 text-slate-500 font-medium">Mitigation Path</span>
-                            <span className="col-span-8 text-slate-100 font-medium italic">
+                            <span className="col-span-4 text-slate-550 font-bold">Mitigation Path</span>
+                            <span className="col-span-8 text-[#141414] font-bold italic">
                               {selectedPayload.matchedRegister.diagnosticAction}
                             </span>
                           </div>
@@ -843,9 +843,9 @@ export function TelemetrySimulator() {
 
                       {/* SLA Warning box if out of compliance */}
                       {selectedPayload.complianceStatus === "OUT_OF_WARRANTY_COMPLIANCE" && (
-                        <div className="bg-amber-950/10 border border-amber-550/30 p-2.5 rounded-lg flex items-start space-x-2">
-                          <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                          <p className="text-[10px] text-amber-300/90 leading-tight">
+                        <div className="bg-amber-100 border-2 border-amber-650 p-2.5 rounded-none flex items-start space-x-2 font-mono">
+                          <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                          <p className="text-[10px] text-amber-950 leading-tight">
                             WARNING: Asset warranty is expired! Replacement operations may be subject to manual invoice processing outside the standard automated lifecycle contracts.
                           </p>
                         </div>
@@ -854,8 +854,8 @@ export function TelemetrySimulator() {
                       {/* Action Blocks */}
                       <div className="flex items-center space-x-3 pt-2">
                         {partsDispatched[selectedPayload.alert.deviceId + selectedPayload.alert.telemetryTimestamp] ? (
-                          <div className="flex-1 bg-emerald-950/20 text-emerald-400 border border-emerald-500/20 rounded-lg py-2 text-xs font-semibold text-center flex items-center justify-center space-x-1.5">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          <div className="flex-1 bg-white text-emerald-800 border-2 border-[#141414] py-2 text-xs font-black font-mono text-center flex items-center justify-center space-x-1.5 shadow-[2px_2px_0px_#141414]">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                             <span>Parts Ordered Successfully</span>
                           </div>
                         ) : (
@@ -868,7 +868,7 @@ export function TelemetrySimulator() {
                                 [selectedPayload.alert.deviceId + selectedPayload.alert.telemetryTimestamp]: true
                               }));
                             }}
-                            className="flex-1 bg-teal-500 hover:bg-teal-600 text-slate-950 rounded-lg py-2 text-xs font-bold text-center transition tracking-wide active:scale-95"
+                            className="flex-1 bg-white text-[#141414] border-2 border-[#141414] py-2 text-xs font-extrabold text-center transition tracking-wide shadow-[2px_2px_0px_#141414] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none font-mono uppercase"
                           >
                             Trigger Parts Dispatch
                           </button>
@@ -880,7 +880,7 @@ export function TelemetrySimulator() {
                             e.preventDefault();
                             addTrace(`[ACTION INITIATED] Action.OpenUrl: Review Silicon Datasheet request for register mapping.`);
                           }}
-                          className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700 py-2 rounded-lg text-xs font-semibold text-center flex items-center justify-center space-x-1 transition"
+                          className="flex-1 bg-[#141414] hover:bg-zinc-800 text-white py-2 text-xs font-bold text-center flex items-center justify-center space-x-1.5 transition shadow-[2px_2px_0px_#141414] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none font-mono uppercase"
                         >
                           <span>Review Datasheet</span>
                           <ExternalLink className="w-3 h-3" />
@@ -893,10 +893,10 @@ export function TelemetrySimulator() {
 
               {/* Raw JSON Structure Panel */}
               <div className="space-y-2 flex-1 flex flex-col min-h-[160px]">
-                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest font-mono">
-                  Adaptive Card JSON String Stream
+                <div className="text-[10px] text-slate-700 font-extrabold uppercase tracking-widest font-mono">
+                  Adaptive Card JSON Core String Stream
                 </div>
-                <div className="flex-1 bg-slate-950 rounded-xl border border-slate-900 p-3 overflow-auto font-mono text-[10px] leading-tight text-slate-400 h-44">
+                <div className="flex-1 bg-[#141414] p-3 text-[#E4E3E0] overflow-auto font-mono text-[9px] leading-tight border-2 border-[#141414] h-44">
                   <pre className="select-all">
                     <code>{generateAdaptiveCardJson(selectedPayload)}</code>
                   </pre>
