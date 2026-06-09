@@ -1,0 +1,6 @@
+{
+  "name": "VektorOps Telemetry Network",
+  "description": "Multi-tenant hardware diagnostics and compliance pipeline simulation. Processes telemetry logs, enforces agent security boundaries, performs semantic register lookups via Foundry IQ, and outputs M365 Copilot Adaptive Cards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
