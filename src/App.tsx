@@ -7,13 +7,17 @@ import React, { useState } from "react";
 import { motion } from "motion/react";
 import { 
   Terminal, ShieldCheck, Cpu, Database, Play, Code2, BookOpen, 
-  Settings, Network, CheckCircle2, AlertTriangle, Layers, Users, Clock
+  Settings, Network, CheckCircle2, AlertTriangle, Layers, Users, Clock, Activity
 } from "lucide-react";
 import { TelemetrySimulator } from "./components/TelemetrySimulator";
+import { ComplianceHeatmap } from "./components/ComplianceHeatmap";
 import { CsharpExplorer } from "./components/CsharpExplorer";
+import { DiagnosticsPayload } from "./types";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"simulator" | "codebase" | "architecture">("simulator");
+  const [activeTab, setActiveTab] = useState<"simulator" | "compliance" | "codebase" | "architecture">("simulator");
+  const [activeTenant, setActiveTenant] = useState<string>("TENANT-ALPHA");
+  const [processedLogs, setProcessedLogs] = useState<DiagnosticsPayload[]>([]);
 
   // Telemetry status metrics
   const systemMetrics = [
@@ -46,6 +50,23 @@ export default function App() {
                 Multi-Tenant Hardware Diagnostic & Compliance Network v8.4.12
               </p>
             </div>
+          </div>
+
+          {/* Multi-Tenant Switcher Dropdown */}
+          <div className="flex items-center space-x-3 bg-white/5 border border-white/10 rounded px-3.5 py-2 hover:border-white/20 transition-all self-stretch md:self-auto justify-between md:justify-start">
+            <span className="text-[9px] font-mono uppercase tracking-widest text-slate-300 font-black">
+              Sec_Boundary:
+            </span>
+            <select
+              id="id-header-tenant-select"
+              value={activeTenant}
+              onChange={(e) => setActiveTenant(e.target.value)}
+              className="bg-red-600 text-white font-mono text-xs font-black border-2 border-white px-2.5 py-0.5 outline-none shadow-[2px_2px_0px_#141414] focus:ring-1 focus:ring-red-500 transition-all cursor-pointer uppercase"
+            >
+              <option value="TENANT-ALPHA" className="bg-[#141414] text-white font-bold">ALPHA</option>
+              <option value="TENANT-BETA" className="bg-[#141414] text-white font-bold">BETA</option>
+              <option value="TENANT-GAMMA" className="bg-[#141414] text-white font-bold">GAMMA</option>
+            </select>
           </div>
 
           {/* Quick Stats Metrics bar */}
@@ -89,10 +110,10 @@ export default function App() {
           </div>
 
           {/* Workspace Tab Switcher */}
-          <div className="flex bg-[#E4E3E0] border-2 border-[#141414] p-1 rounded self-start lg:self-auto shrink-0 shadow-[2px_2px_0px_#141414]">
+          <div className="flex bg-[#E4E3E0] border-2 border-[#141414] p-1 rounded self-start lg:self-auto shrink-0 shadow-[2px_2px_0px_#141414] flex-wrap gap-1">
             <button
               onClick={() => setActiveTab("simulator")}
-              className={`flex items-center space-x-2 px-4 py-2 rounded text-xs font-bold font-mono tracking-wide transition-all ${
+              className={`flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-bold font-mono tracking-wide transition-all ${
                 activeTab === "simulator"
                   ? "bg-[#141414] text-white font-black"
                   : "text-slate-700 hover:text-[#141414]"
@@ -103,8 +124,20 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => setActiveTab("compliance")}
+              className={`flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-bold font-mono tracking-wide transition-all ${
+                activeTab === "compliance"
+                  ? "bg-[#141414] text-white font-black"
+                  : "text-slate-700 hover:text-[#141414]"
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5 text-red-600" />
+              <span>D3 Compliance Heatmap</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab("codebase")}
-              className={`flex items-center space-x-2 px-4 py-2 rounded text-xs font-bold font-mono tracking-wide transition-all ${
+              className={`flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-bold font-mono tracking-wide transition-all ${
                 activeTab === "codebase"
                   ? "bg-[#141414] text-white font-black"
                   : "text-slate-700 hover:text-[#141414]"
@@ -116,7 +149,7 @@ export default function App() {
 
             <button
               onClick={() => setActiveTab("architecture")}
-              className={`flex items-center space-x-2 px-4 py-2 rounded text-xs font-bold font-mono tracking-wide transition-all ${
+              className={`flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-bold font-mono tracking-wide transition-all ${
                 activeTab === "architecture"
                   ? "bg-[#141414] text-white font-black"
                   : "text-slate-700 hover:text-[#141414]"
@@ -137,7 +170,26 @@ export default function App() {
               transition={{ duration: 0.25 }}
               className="id-viewport-simulator"
             >
-              <TelemetrySimulator />
+              <TelemetrySimulator 
+                activeTenant={activeTenant} 
+                setActiveTenant={setActiveTenant} 
+                processedLogs={processedLogs}
+                setProcessedLogs={setProcessedLogs}
+              />
+            </motion.div>
+          )}
+
+          {activeTab === "compliance" && (
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25 }}
+              className="id-viewport-compliance"
+            >
+              <ComplianceHeatmap 
+                processedLogs={processedLogs} 
+                activeTenant={activeTenant} 
+              />
             </motion.div>
           )}
 
@@ -247,7 +299,7 @@ export default function App() {
         </div>
         <div className="bg-white/10 px-2 py-0.5 border border-white/20 rounded">
           <span>Active Session Target Context ID: </span>
-          <span className="text-white font-bold">TENANT-ALPHA</span>
+          <span className="text-white font-bold">{activeTenant}</span>
         </div>
         <div className="opacity-75">
           <span>Runtime Platform: </span>
