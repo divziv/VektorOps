@@ -172,16 +172,14 @@ export function TelemetrySimulator({
   useEffect(() => {
     const interval = setInterval(() => {
       setChartData((prev) => {
-        const next = [...prev];
-        next.shift();
-        next[0].time = "-50s";
-        next[1].time = "-40s";
-        next[2].time = "-30s";
-        next[3].time = "-20s";
-        next[4].time = "-10s";
-        next[5].time = "-5s";
-        next.push({ time: "0s (now)", frequency: 0, severity: 0 });
-        return next;
+        const next = prev.slice(1);
+        const times = ["-50s", "-40s", "-30s", "-20s", "-10s", "-5s"];
+        const updated = next.map((item, idx) => ({
+          ...item,
+          time: times[idx] || item.time
+        }));
+        updated.push({ time: "0s (now)", frequency: 0, severity: 0 });
+        return updated;
       });
     }, 10000);
     return () => clearInterval(interval);
@@ -326,11 +324,16 @@ export function TelemetrySimulator({
       
       // Update chart metrics for security violation (critical severity 10)
       setChartData((prev) => {
-        const next = [...prev];
-        const lastIndex = next.length - 1;
-        next[lastIndex].frequency = next[lastIndex].frequency + 1;
-        next[lastIndex].severity = Math.max(next[lastIndex].severity, 10);
-        return next;
+        return prev.map((item, i) => {
+          if (i === prev.length - 1) {
+            return {
+              ...item,
+              frequency: item.frequency + 1,
+              severity: Math.max(item.severity, 10),
+            };
+          }
+          return item;
+        });
       });
       
       return payload;
@@ -393,11 +396,16 @@ export function TelemetrySimulator({
     // Update chart metrics for success path (Severity scaled to compliance status)
     const logSeverity = compliance === "CRITICAL_SYS_THRESHOLD_EXCEEDED" ? 8 : (compliance === "OUT_OF_WARRANTY_COMPLIANCE" ? 6 : compliance === "CRITICAL_CLASS_GOLD_SLA" ? 4 : 2);
     setChartData((prev) => {
-      const next = [...prev];
-      const lastIndex = next.length - 1;
-      next[lastIndex].frequency = next[lastIndex].frequency + 1;
-      next[lastIndex].severity = Math.max(next[lastIndex].severity, logSeverity);
-      return next;
+      return prev.map((item, i) => {
+        if (i === prev.length - 1) {
+          return {
+            ...item,
+            frequency: item.frequency + 1,
+            severity: Math.max(item.severity, logSeverity),
+          };
+        }
+        return item;
+      });
     });
 
     const alertWithMetrics = {
