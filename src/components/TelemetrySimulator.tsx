@@ -41,6 +41,14 @@ const REGISTER_CATALOG: Record<string, RegisterMetadata> = {
     description: "PCIe Gen5 physical block lane synchronizer loss-of-signal. Frame misalignment rate exceeded 15% on Link Port 4.",
     hardwareLevel: "PCIe Root Complex",
     diagnosticAction: "Trigger logical retrain sequence in port register 0xDE02. If retries expire, fall back link lanes from x16 to x8 width."
+  },
+  "0xERR_OVR": {
+    errorCode: "0xERR_OVR",
+    registerName: "ALU_REG_INTEG_OVERFLOW",
+    failingBit: 31,
+    description: "Arithmetic register overflow detected in ALU accumulator register. Accumulation register holding state has run past maximum 64-bit capacity due to high sampling clock iteration.",
+    hardwareLevel: "Arithmetic Logic Unit",
+    diagnosticAction: "Dispatch auto-clear overflow bit interrupts, scale instruction pipeline back, and clear ALU accumulation cache."
   }
 };
 
@@ -131,6 +139,7 @@ export function TelemetrySimulator({
   const [selectedPayload, setSelectedPayload] = useState<DiagnosticsPayload | null>(null);
   const [traces, setTraces] = useState<string[]>([]);
   const [partsDispatched, setPartsDispatched] = useState<Record<string, boolean>>({});
+  const [searchTerm, setSearchTerm] = useState<string>("");
 
   // Auto-Ingest State
   const [autoIngest, setAutoIngest] = useState<boolean>(false);
@@ -703,6 +712,14 @@ export function TelemetrySimulator({
     return JSON.stringify(structure, null, 2);
   };
 
+  const filteredProcessedLogs = processedLogs.filter((payload) => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    const dId = payload.alert.deviceId || "";
+    const regCode = payload.alert.registerErrorCode || "";
+    return dId.toLowerCase().includes(term) || regCode.toLowerCase().includes(term);
+  });
+
   return (
     <div className="space-y-6 select-text">
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
@@ -835,6 +852,37 @@ export function TelemetrySimulator({
             >
               <span className={`w-1.5 h-1.5 rounded-full ${autoIngest ? "bg-white animate-pulse" : "bg-slate-400"}`}></span>
               {autoIngest ? "Active" : "Disabled"}
+            </button>
+          </div>
+
+          <div className="border-t-2 border-dashed border-slate-250 pt-3 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-[#141414] uppercase font-mono flex items-center gap-1.5">
+              <Cpu className="w-3.5 h-3.5 text-purple-600 animate-pulse" /> Force Register Overflow
+            </span>
+            <button
+              onClick={() => {
+                const overflowLog: HardwareAlertLog = {
+                  deviceId: `CORE-ALU-OVERFLOW-INTEL-99`,
+                  nodeTenantId: activeTenant,
+                  registerErrorCode: "0xERR_OVR",
+                  hexDumpValue: "0xFFFFFFFFFFFFFFFF",
+                  telemetryTimestamp: new Date().toISOString()
+                };
+                
+                // Attach custom hardware limits metrics
+                (overflowLog as any).temperature = 94.5;
+                (overflowLog as any).voltage = 1.38;
+                (overflowLog as any).errorRate = 29.2;
+
+                addTrace(`[MANUAL OVERFLOW] Initiating live register buffer overflow injection event on active Node context...`);
+                const payload = processLog(overflowLog);
+                setProcessedLogs((prev) => [payload, ...prev]);
+                setSelectedPayload(payload);
+              }}
+              className="text-[9px] px-2 py-1 font-mono font-bold uppercase transition border flex items-center gap-1.5 bg-purple-600 text-white border-black shadow-[1.5px_1.5px_0px_rgba(0,0,0,1)] hover:bg-purple-700 hover:shadow-none hover:translate-x-[0.5px] hover:translate-y-[0.5px]"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+              Inject event
             </button>
           </div>
         </div>
@@ -980,6 +1028,7 @@ export function TelemetrySimulator({
             </button>
           </form>
         </div>
+      </div>
           {/* Center Console: Stream Table & Log list + Real-Time Telemetry Traces (Middle panel) */}
       <div className="xl:col-span-4 flex flex-col space-y-6">
         {/* Streamed Logs Ingress Queue */}
@@ -1023,77 +1072,116 @@ export function TelemetrySimulator({
           </div>
 
           {middleTab === "queue" ? (
-            <div className="flex-1 overflow-auto space-y-2.5 pr-1">
-              {processedLogs.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-slate-550 text-xs py-8 space-y-2">
-                  <Server className="w-10 h-10 text-slate-400" />
-                  <span>Ingest a hardware telemetry stream to generate incident logs</span>
-                </div>
-              ) : (
-                processedLogs.map((payload, index) => {
-                  const isViolation = payload.complianceStatus === "SECURITY_VIOLATION_BLOCKED";
-                  const isSelected = selectedPayload?.alert.deviceId === payload.alert.deviceId && 
-                                     selectedPayload?.alert.telemetryTimestamp === payload.alert.telemetryTimestamp;
+            <div className="flex-1 flex flex-col min-h-0 space-y-2">
+              {/* Search filter input */}
+              <div className="relative">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search by hardware ID or error code..."
+                  className="w-full bg-white border-2 border-[#141414] px-2.5 py-1.5 text-xs text-[#141414] placeholder-slate-400 outline-none font-mono font-bold shadow-[1.5px_1.5px_0px_rgba(0,0,0,1)] focus:shadow-[2px_2px_0px_rgba(0,0,0,1)] transition-all"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-400 hover:text-black font-black"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
 
-                  return (
-                    <button
-                      key={index}
-                      onClick={() => setSelectedPayload(payload)}
-                      className={`w-full text-left p-3 border-2 transition-all flex items-start space-x-3 rounded-none ${
-                        isSelected 
-                          ? isViolation 
-                            ? "bg-red-50 border-red-600 ring-2 ring-red-600"
-                            : "bg-[#E4E3E0] border-[#141414] ring-2 ring-[#141414]"
-                          : isViolation 
-                            ? "bg-red-55 border-red-200 hover:bg-red-100/35 text-red-950"
-                            : "bg-white border-slate-300 hover:border-[#141414] text-[#141414]"
-                      }`}
-                    >
-                      <div className="mt-0.5 shrink-0">
-                        {isViolation ? (
-                          <ShieldAlert className="w-4 h-4 text-red-600" />
-                        ) : payload.complianceStatus === "OUT_OF_WARRANTY_COMPLIANCE" ? (
-                          <AlertTriangle className="w-4 h-4 text-amber-600" />
-                        ) : payload.complianceStatus === "CRITICAL_SYS_THRESHOLD_EXCEEDED" ? (
-                          <Sliders className="w-4 h-4 text-orange-555 animate-pulse" />
-                        ) : (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        )}
-                      </div>
-                      
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-mono text-xs font-extrabold tracking-tight text-[#141414]">
-                            {payload.alert.registerErrorCode}
-                          </span>
-                          <span className="text-[9px] text-slate-500">
-                            {new Date(payload.alert.telemetryTimestamp).toLocaleTimeString()}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-700 font-mono truncate">{payload.alert.deviceId}</p>
-                        
-                        <div className="flex items-center space-x-2 mt-1.5">
-                          <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${
-                            isViolation 
-                              ? "bg-red-600 text-white border-[#141414]"
-                              : "bg-[#141414] text-white border-[#141414]"
-                          }`}>
-                            {payload.alert.nodeTenantId}
-                          </span>
-                          <span className="text-[10px] text-slate-500">
-                            {payload.processingTimeMs.toFixed(1)} μs
-                          </span>
-                          {payload.complianceStatus === "CRITICAL_SYS_THRESHOLD_EXCEEDED" && (
-                            <span className="text-[8px] bg-orange-105 text-orange-700 font-bold border border-orange-300 px-1 py-0.1 font-mono rounded uppercase animate-pulse">
-                              Limit Exceeded
-                            </span>
+              <div className="flex-1 overflow-auto space-y-2.5 pr-1">
+                {filteredProcessedLogs.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-slate-550 text-xs py-8 space-y-2">
+                    <Server className="w-10 h-10 text-slate-400" />
+                    <span>
+                      {processedLogs.length === 0 
+                        ? "Ingest a hardware telemetry stream to generate incident logs"
+                        : "No matching incidents found"}
+                    </span>
+                  </div>
+                ) : (
+                  filteredProcessedLogs.map((payload, index) => {
+                    const isViolation = payload.complianceStatus === "SECURITY_VIOLATION_BLOCKED";
+                    const isOverflow = payload.alert.registerErrorCode === "0xERR_OVR";
+                    const isSelected = selectedPayload?.alert.deviceId === payload.alert.deviceId && 
+                                       selectedPayload?.alert.telemetryTimestamp === payload.alert.telemetryTimestamp;
+
+                    return (
+                      <button
+                        key={index}
+                        onClick={() => setSelectedPayload(payload)}
+                        className={`w-full text-left p-3 border-2 transition-all flex items-start space-x-3 rounded-none ${
+                          isSelected 
+                            ? isViolation 
+                              ? "bg-red-55 border-red-600 ring-2 ring-red-650"
+                              : isOverflow
+                              ? "bg-purple-100/60 border-purple-600 ring-2 ring-purple-600 shadow-[2px_2px_0px_#7c3aed]"
+                              : "bg-[#E4E3E0] border-[#141414] ring-2 ring-[#141414]"
+                            : isViolation 
+                              ? "bg-red-55 border-red-200 hover:bg-red-100/35 text-red-950"
+                              : isOverflow
+                              ? "bg-purple-50/50 border-purple-200 hover:bg-purple-100/35 text-purple-950"
+                              : "bg-white border-slate-300 hover:border-[#141414] text-[#141414]"
+                        }`}
+                      >
+                        <div className="mt-0.5 shrink-0">
+                          {isViolation ? (
+                            <ShieldAlert className="w-4 h-4 text-red-600" />
+                          ) : isOverflow ? (
+                            <Cpu className="w-4 h-4 text-purple-600 animate-pulse" />
+                          ) : payload.complianceStatus === "OUT_OF_WARRANTY_COMPLIANCE" ? (
+                            <AlertTriangle className="w-4 h-4 text-amber-600" />
+                          ) : payload.complianceStatus === "CRITICAL_SYS_THRESHOLD_EXCEEDED" ? (
+                            <Sliders className="w-4 h-4 text-orange-555 animate-pulse" />
+                          ) : (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                           )}
                         </div>
-                      </div>
-                    </button>
-                  );
-                })
-              )}
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className={`font-mono text-xs font-extrabold tracking-tight ${isOverflow ? "text-purple-700" : "text-[#141414]"}`}>
+                              {payload.alert.registerErrorCode}
+                            </span>
+                            <span className="text-[9px] text-slate-500">
+                              {new Date(payload.alert.telemetryTimestamp).toLocaleTimeString()}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-700 font-mono truncate">{payload.alert.deviceId}</p>
+                          
+                          <div className="flex items-center space-x-2 mt-1.5">
+                            <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${
+                              isViolation 
+                                ? "bg-red-600 text-white border-[#141414]"
+                                : isOverflow
+                                ? "bg-purple-600 text-white border-purple-600"
+                                : "bg-[#141414] text-white border-[#141414]"
+                            }`}>
+                              {payload.alert.nodeTenantId}
+                            </span>
+                            <span className="text-[10px] text-slate-500">
+                              {payload.processingTimeMs.toFixed(1)} μs
+                            </span>
+                            {payload.complianceStatus === "CRITICAL_SYS_THRESHOLD_EXCEEDED" && (
+                              <span className="text-[8px] bg-orange-100 text-orange-700 font-bold border border-orange-300 px-1 py-0.1 font-mono rounded uppercase animate-pulse">
+                                Limit Exceeded
+                              </span>
+                            )}
+                            {isOverflow && (
+                              <span className="text-[8px] bg-purple-100 text-purple-750 font-bold border border-purple-300 px-1 py-0.1 font-mono rounded uppercase">
+                                Overflow Alert
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
             </div>
           ) : (
             <div className="flex-1 flex flex-col space-y-3 overflow-auto pr-1">
@@ -1138,18 +1226,41 @@ export function TelemetrySimulator({
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between items-center">
                   <span className="text-[9px] text-slate-600 font-mono">Paste logs array or drop a JSON file:</span>
-                  <div className="space-x-1.5 font-mono text-[9px]">
+                  <div className="space-x-1.5 font-mono text-[9px] flex items-center">
                     <button
                       type="button"
                       onClick={loadSampleBatch}
-                      className="text-slate-705 underline focus:outline-none cursor-pointer"
+                      className="text-slate-705 underline focus:outline-none cursor-pointer font-bold"
                     >
                       Load Sample
                     </button>
+                    <span className="text-slate-350">|</span>
+                    <label className="text-slate-705 underline focus:outline-none cursor-pointer font-bold">
+                      <span>Upload File</span>
+                      <input
+                        type="file"
+                        accept=".json"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                              if (event.target && typeof event.target.result === "string") {
+                                setBatchRawJson(event.target.result);
+                                addTrace(`[BATCH SYSTEM] Loaded JSON file content via picker: ${file.name} (${file.size} bytes).`);
+                              }
+                            };
+                            reader.readAsText(file);
+                          }
+                        }}
+                      />
+                    </label>
+                    <span className="text-slate-350">|</span>
                     <button
                       type="button"
                       onClick={() => setBatchRawJson("")}
-                      className="text-red-650 underline focus:outline-none cursor-pointer"
+                      className="text-red-650 underline focus:outline-none cursor-pointer font-bold"
                     >
                       Clear
                     </button>
@@ -1210,7 +1321,7 @@ export function TelemetrySimulator({
               </div>
             </div>
           )}
-        </div>     </div>
+        </div>
 
         {/* Telemetry Tracing Console Terminal (C# logger) */}
         <div className="bg-[#141414] border-4 border-[#141414] p-5 flex flex-col h-[280px] shadow-[4px_4px_0px_#141414] text-[#E4E3E0]">
@@ -1267,14 +1378,37 @@ export function TelemetrySimulator({
               {selectedPayload && (
                 <button
                   onClick={() => setIsCardModalOpen(true)}
-                  className="bg-red-650 hover:bg-[#141414] text-white text-[10px] uppercase font-mono font-black px-2 py-0.5 border border-[#141414] shadow-[1.5px_1.5px_0px_#141414] hover:shadow-none hover:translate-x-[0.5px] hover:translate-y-[1px] transition-all cursor-pointer"
+                  className="bg-red-650 hover:bg-[#141414] text-white text-[10px] uppercase font-mono font-black px-2 py-1 border border-[#141414] shadow-[1.5px_1.5px_0px_#141414] hover:shadow-none hover:translate-x-[0.5px] hover:translate-y-[1px] transition-all cursor-pointer"
                   title="Show full interactive M365 Copilot Adaptive Card preview"
                 >
                   Modal Preview
                 </button>
               )}
               {selectedPayload && (
-                <div className="flex items-center space-x-1 bg-[#141414] text-[#E4E3E0] px-2.5 py-0.5 border border-black font-semibold font-mono text-[9px]">
+                <button
+                  onClick={() => {
+                    try {
+                      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(selectedPayload, null, 2));
+                      const downloadAnchor = document.createElement('a');
+                      downloadAnchor.setAttribute("href", dataStr);
+                      downloadAnchor.setAttribute("download", `vektorops_audit_${selectedPayload.alert.deviceId}_${selectedPayload.alert.registerErrorCode}.json`);
+                      document.body.appendChild(downloadAnchor);
+                      downloadAnchor.click();
+                      downloadAnchor.remove();
+                      addTrace(`[AUDIT] Manually exported JSON incident file for ${selectedPayload.alert.deviceId}`);
+                    } catch (err) {
+                      addTrace(`[ERROR] Export failed: ${err instanceof Error ? err.message : "unknown"}`);
+                    }
+                  }}
+                  className="bg-white hover:bg-neutral-150 text-[#141414] text-[10px] uppercase font-mono font-black px-2 py-1 border border-[#141414] shadow-[1.5px_1.5px_0px_#141414] hover:shadow-none hover:translate-x-[0.5px] hover:translate-y-[1px] transition-all cursor-pointer flex items-center gap-1"
+                  title="Download selected incident payload as a JSON file"
+                >
+                  <FileJson className="w-3.5 h-3.5" />
+                  <span>JSON</span>
+                </button>
+              )}
+              {selectedPayload && (
+                <div className="flex items-center space-x-1 bg-[#141414] text-[#E4E3E0] px-2.5 py-1 border border-black font-semibold font-mono text-[9px]">
                   <span>
                     Time: {selectedPayload.processingTimeMs.toFixed(1)} μs
                   </span>
