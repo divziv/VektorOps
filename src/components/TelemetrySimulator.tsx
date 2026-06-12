@@ -183,6 +183,26 @@ export function TelemetrySimulator({
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [copiedLogIndex, setCopiedLogIndex] = useState<number | null>(null);
 
+  // States for filter, sorting, bulk select, and toast notification additions
+  const [severityFilter, setSeverityFilter] = useState<string>("ALL");
+  const [tenantFilter, setTenantFilter] = useState<string>("ALL");
+  const [sortBy, setSortBy] = useState<string>("TIME_DESC");
+  const [toasts, setToasts] = useState<{ id: string; message: string; type: "error" | "warning" | "success" }[]>([]);
+  const [selectedLogKeys, setSelectedLogKeys] = useState<string[]>([]);
+  const [expandedHexKeys, setExpandedHexKeys] = useState<Record<string, boolean>>({});
+
+  const showToast = (message: string, type: "error" | "warning" | "success" = "success") => {
+    const id = Math.random().toString(36).slice(2, 9);
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 5000);
+  };
+
+  const getPayloadKey = (payload: DiagnosticsPayload) => {
+    return `${payload.alert.telemetryTimestamp || ""}-${payload.alert.deviceId || ""}-${payload.alert.registerErrorCode || ""}`;
+  };
+
   // Handle rolling metrics chart timer (shifts every 10 seconds)
   useEffect(() => {
     const interval = setInterval(() => {
@@ -497,6 +517,12 @@ export function TelemetrySimulator({
           return item;
         });
       });
+
+      // Trigger visual toast notification for security boundary violation
+      showToast(
+        `Security Boundary Breach blocked! ${log.deviceId} associated with tenant ${log.nodeTenantId} attempted data delivery while active session context is locked to ${activeTenant}.`,
+        "error"
+      );
       
       return payload;
     }
@@ -865,13 +891,63 @@ export function TelemetrySimulator({
     return JSON.stringify(structure, null, 2);
   };
 
-  const filteredProcessedLogs = processedLogs.filter((payload) => {
-    if (!searchTerm.trim()) return true;
-    const term = searchTerm.toLowerCase();
-    const dId = payload.alert.deviceId || "";
-    const regCode = payload.alert.registerErrorCode || "";
-    return dId.toLowerCase().includes(term) || regCode.toLowerCase().includes(term);
-  });
+  const filteredProcessedLogs = React.useMemo(() => {
+    // 1. Filter
+    let items = processedLogs.filter((payload) => {
+      // Search Term check
+      if (searchTerm.trim()) {
+        const term = searchTerm.toLowerCase();
+        const dId = payload.alert.deviceId || "";
+        const regCode = payload.alert.registerErrorCode || "";
+        const matchesSearch = dId.toLowerCase().includes(term) || regCode.toLowerCase().includes(term);
+        if (!matchesSearch) return false;
+      }
+      
+      // Tenant check
+      if (tenantFilter !== "ALL") {
+        if (payload.alert.nodeTenantId !== tenantFilter) return false;
+      }
+
+      // Severity check
+      if (severityFilter !== "ALL") {
+        const sev = getSeverityInfo(payload);
+        if (sev.label.toUpperCase() !== severityFilter) return false;
+      }
+
+      return true;
+    });
+
+    // 2. Sort
+    items = [...items].sort((a, b) => {
+      if (sortBy === "TIME_DESC") {
+        return new Date(b.alert.telemetryTimestamp).getTime() - new Date(a.alert.telemetryTimestamp).getTime();
+      }
+      if (sortBy === "TIME_ASC") {
+        return new Date(a.alert.telemetryTimestamp).getTime() - new Date(b.alert.telemetryTimestamp).getTime();
+      }
+      if (sortBy === "TENANT_ASC") {
+        return (a.alert.nodeTenantId || "").localeCompare(b.alert.nodeTenantId || "");
+      }
+      if (sortBy === "TENANT_DESC") {
+        return (b.alert.nodeTenantId || "").localeCompare(a.alert.nodeTenantId || "");
+      }
+      if (sortBy === "SEVERITY_DESC" || sortBy === "SEVERITY_ASC") {
+        const score = (payload: DiagnosticsPayload) => {
+          const status = payload.complianceStatus;
+          if (status === "SECURITY_VIOLATION_BLOCKED") return 3;
+          if (status === "CRITICAL_SYS_THRESHOLD_EXCEEDED" || payload.alert.registerErrorCode === "0xERR_OVR") return 3;
+          if (status === "OUT_OF_WARRANTY_COMPLIANCE" || payload.alert.registerErrorCode === "0xERR_A4F") return 2;
+          return 1; // Info
+        };
+        const scoreA = score(a);
+        const scoreB = score(b);
+        return sortBy === "SEVERITY_DESC" ? scoreB - scoreA : scoreA - scoreB;
+      }
+      return 0;
+    });
+
+    return items;
+  }, [processedLogs, searchTerm, tenantFilter, severityFilter, sortBy]);
 
   return (
     <div className="space-y-6 select-text">
@@ -1023,27 +1099,29 @@ export function TelemetrySimulator({
             </button>
           </div>
 
-          {/* Continuous Auto-Ingest stream toggle */}
+          {/* Continuous Auto-Ingest stream toggle labeled as 'Live Streaming' button */}
           <div className="border-t-2 border-dashed border-slate-250 pt-3 flex items-center justify-between">
-            <span className="text-[10px] font-bold text-[#141414] uppercase font-mono flex items-center gap-1.5">
-              <Network className="w-3.5 h-3.5 text-red-655" /> Live Auto-Ingestion (3s)
+            <span className="text-[10px] font-bold text-[#141414] uppercase font-mono flex items-center gap-1.5 animate-pulse">
+              <span className="w-2 h-2 rounded-full bg-red-650 inline-block"></span>
+              <span>Live Streaming (3s Interval)</span>
             </span>
             <button
+              id="live-streaming-toggle-btn"
               onClick={() => {
                 setAutoIngest(!autoIngest);
                 if (!autoIngest) {
                   setIsPlaying(false); // disable standard manual stream
                 }
-                addTrace(`[AUTO-INGEST] Swapped state: ${!autoIngest ? "STREAMING" : "PAUSED"}`);
+                addTrace(`[LIVE-STREAMING] Swapped live stream state: ${!autoIngest ? "STREAM MODE ENABLED" : "STREAM MODE PAUSED"}`);
               }}
-              className={`text-[9px] px-2 py-1 font-mono font-bold uppercase transition border flex items-center gap-1.5 ${
+              className={`text-[9px] px-2.5 py-1.5 font-mono font-black uppercase transition border-2 border-black flex items-center gap-1.5 cursor-pointer shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none hover:bg-neutral-50 ${
                 autoIngest
-                  ? "bg-red-650 text-white border-black shadow-[1.5px_1.5px_0px_rgba(0,0,0,1)]"
-                  : "bg-white text-slate-705 border-slate-300 hover:border-black"
+                  ? "bg-red-600 text-white border-black"
+                  : "bg-white text-slate-800"
               }`}
             >
-              <span className={`w-1.5 h-1.5 rounded-full ${autoIngest ? "bg-white animate-pulse" : "bg-slate-400"}`}></span>
-              {autoIngest ? "Active" : "Disabled"}
+              <Activity className={`w-3.5 h-3.5 ${autoIngest ? "animate-pulse text-white font-black" : "text-slate-500"}`} />
+              <span>{autoIngest ? "Live Streaming: ACTIVE" : "Live Streaming: PAUSED"}</span>
             </button>
           </div>
 
@@ -1329,21 +1407,140 @@ export function TelemetrySimulator({
               })()}
 
               {/* Search filter input */}
-              <div className="relative">
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search by hardware ID or error code..."
-                  className="w-full bg-white border-2 border-[#141414] px-2.5 py-1.5 text-xs text-[#141414] placeholder-slate-400 outline-none font-mono font-bold shadow-[1.5px_1.5px_0px_rgba(0,0,0,1)] focus:shadow-[2px_2px_0px_rgba(0,0,0,1)] transition-all"
-                />
-                {searchTerm && (
-                  <button
-                    onClick={() => setSearchTerm("")}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-400 hover:text-black font-black"
-                  >
-                    Clear
-                  </button>
+              <div className="space-y-2.5">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search by hardware ID or error code..."
+                    className="w-full bg-white border-2 border-[#141414] px-2.5 py-1.5 text-xs text-[#141414] placeholder-slate-400 outline-none font-mono font-bold shadow-[1.5px_1.5px_0px_rgba(0,0,0,1)] focus:shadow-[2px_2px_0px_rgba(0,0,0,1)] transition-all"
+                  />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchTerm("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-400 hover:text-black font-black"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                {/* Filter and sorting controls */}
+                <div className="grid grid-cols-3 gap-1.5 font-mono text-[10px]">
+                  {/* Severity Filter Dropdown */}
+                  <div className="flex flex-col space-y-1">
+                    <span className="text-[8px] font-black uppercase text-slate-500">Severity</span>
+                    <select
+                      value={severityFilter}
+                      onChange={(e) => setSeverityFilter(e.target.value)}
+                      className="bg-white border-2 border-[#141414] px-1 py-1 font-mono font-bold text-[#141414] outline-none"
+                    >
+                      <option value="ALL">ALL SEVERITIES</option>
+                      <option value="CRITICAL">CRITICAL</option>
+                      <option value="WARNING">WARNING</option>
+                      <option value="INFO">INFO</option>
+                    </select>
+                  </div>
+
+                  {/* Tenant Filter Dropdown */}
+                  <div className="flex flex-col space-y-1">
+                    <span className="text-[8px] font-black uppercase text-slate-500">Tenant</span>
+                    <select
+                      value={tenantFilter}
+                      onChange={(e) => setTenantFilter(e.target.value)}
+                      className="bg-white border-2 border-[#141414] px-1 py-1 font-mono font-bold text-[#141414] outline-none"
+                    >
+                      <option value="ALL">ALL TENANTS</option>
+                      <option value="TENANT-ALPHA">TENANT-ALPHA</option>
+                      <option value="TENANT-BETA">TENANT-BETA</option>
+                      <option value="TENANT-GAMMA">TENANT-GAMMA</option>
+                    </select>
+                  </div>
+
+                  {/* Sort Controls */}
+                  <div className="flex flex-col space-y-1">
+                    <span className="text-[8px] font-black uppercase text-slate-500">Sort By</span>
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value)}
+                      className="bg-white border-2 border-[#141414] px-1 py-1 font-mono font-bold text-[#141414] outline-none"
+                    >
+                      <option value="TIME_DESC">Time: Newest</option>
+                      <option value="TIME_ASC">Time: Oldest</option>
+                      <option value="SEVERITY_DESC">Severity: High</option>
+                      <option value="SEVERITY_ASC">Severity: Low</option>
+                      <option value="TENANT_ASC">Tenant: A-Z</option>
+                      <option value="TENANT_DESC">Tenant: Z-A</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Bulk selection actions */}
+                {filteredProcessedLogs.length > 0 && (
+                  <div className="flex items-center justify-between bg-slate-100 border-2 border-[#141414] p-1.5 font-mono text-[9px] gap-2">
+                    <div className="flex items-center space-x-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const keysOfFiltered = filteredProcessedLogs.map(getPayloadKey);
+                          const allSelected = keysOfFiltered.every(k => selectedLogKeys.includes(k));
+                          if (allSelected) {
+                            setSelectedLogKeys(prev => prev.filter(k => !keysOfFiltered.includes(k)));
+                          } else {
+                            setSelectedLogKeys(prev => {
+                              const newKeys = [...prev];
+                              keysOfFiltered.forEach(k => {
+                                if (!newKeys.includes(k)) newKeys.push(k);
+                              });
+                              return newKeys;
+                            });
+                          }
+                        }}
+                        className="px-1.5 py-0.5 border border-[#141414] bg-white hover:bg-slate-50 font-bold transition-all cursor-pointer"
+                      >
+                        {filteredProcessedLogs.map(getPayloadKey).every(k => selectedLogKeys.includes(k)) 
+                          ? "Deselect All" 
+                          : "Select All"
+                        }
+                      </button>
+                      <span className="text-slate-550 font-bold">
+                        ({filteredProcessedLogs.filter(p => selectedLogKeys.includes(getPayloadKey(p))).length} / {filteredProcessedLogs.length})
+                      </span>
+                    </div>
+
+                    <div className="flex items-center space-x-1">
+                      {selectedLogKeys.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const selectedCount = processedLogs.filter(p => selectedLogKeys.includes(getPayloadKey(p))).length;
+                            setProcessedLogs(prev => prev.filter(p => !selectedLogKeys.includes(getPayloadKey(p))));
+                            setSelectedLogKeys([]);
+                            addTrace(`[MANAGEMENT] Bulk-deleted ${selectedCount} selected telemetry incident entries.`);
+                          }}
+                          className="px-1.5 py-0.5 border border-red-600 bg-red-100 text-red-700 font-bold hover:bg-red-200 transition-all flex items-center gap-0.5 cursor-pointer"
+                        >
+                          <Trash2 className="w-2.5 h-2.5" />
+                          Delete ({processedLogs.filter(p => selectedLogKeys.includes(getPayloadKey(p))).length})
+                        </button>
+                      )}
+                      
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProcessedLogs([]);
+                          setSelectedLogKeys([]);
+                          setSelectedPayload(null);
+                          addTrace("[MANAGEMENT] Emptied local log buffer completely. Memory clear operational.");
+                        }}
+                        className="px-1.5 py-0.5 border border-slate-400 bg-white hover:bg-slate-50 font-bold text-slate-700 transition-all cursor-pointer"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
 
@@ -1382,6 +1579,28 @@ export function TelemetrySimulator({
                               : "bg-white border-slate-300 hover:border-[#141414] text-[#141414]"
                         }`}
                       >
+                        {/* Custom multi-select checkbox */}
+                        <div 
+                          className="shrink-0 pt-0.5 flex items-center justify-center"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const pKey = getPayloadKey(payload);
+                            setSelectedLogKeys(prev => 
+                              prev.includes(pKey) 
+                                ? prev.filter(k => k !== pKey) 
+                                : [...prev, pKey]
+                            );
+                          }}
+                        >
+                          <div className={`w-4 h-4 border-2 border-[#141414] transition-all bg-white flex items-center justify-center mr-0.5 ${
+                            selectedLogKeys.includes(getPayloadKey(payload)) ? "bg-emerald-500" : ""
+                          }`}>
+                            {selectedLogKeys.includes(getPayloadKey(payload)) && (
+                              <Check className="w-3 h-3 text-white stroke-[3px]" />
+                            )}
+                          </div>
+                        </div>
+
                         <div className="mt-0.5 shrink-0">
                           {isViolation ? (
                             <ShieldAlert className="w-4 h-4 text-red-600" />
@@ -1469,6 +1688,88 @@ export function TelemetrySimulator({
                               )}
                             </button>
                           </div>
+
+                          {/* Expandable Detail Panel: Raw Binary Hex Dump */}
+                          {isSelected && (
+                            <div 
+                              className="mt-3 border-t border-dashed border-[#141414]/30 pt-2.5 font-mono text-[9px] pointer-events-auto"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="flex justify-between items-center text-slate-600 font-bold mb-1">
+                                <span className="uppercase text-[8px] tracking-wider text-slate-500 font-black">Memory Frame Buffer (Hex/Binary)</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const pKey = getPayloadKey(payload);
+                                    setExpandedHexKeys(prev => ({ ...prev, [pKey]: prev[pKey] === false }));
+                                  }}
+                                  className="underline hover:text-black font-extrabold cursor-pointer uppercase text-[8px]"
+                                >
+                                  {expandedHexKeys[getPayloadKey(payload)] !== false ? "[Collapse Hex]" : "[Expand Hex]"}
+                                </button>
+                              </div>
+                              
+                              {expandedHexKeys[getPayloadKey(payload)] !== false && (
+                                <div className="space-y-2 bg-[#F3F2F1] border-2 border-[#141414] p-2 shadow-[2px_2px_0px_#141414] text-[#141414]">
+                                  <div className="flex justify-between font-black border-b border-[#141414] pb-1 text-slate-500 uppercase text-[8px]">
+                                    <span>Offset</span>
+                                    <span>Hex Frame</span>
+                                    <span>ASCII</span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-[10px] py-0.5">
+                                    <span className="text-indigo-650 font-bold font-mono">0x00000000</span>
+                                    <div className="flex gap-1">
+                                      {(() => {
+                                        const clean = payload.alert.hexDumpValue.replace(/^0x/gi, '');
+                                        const bytes: string[] = [];
+                                        for (let i = 0; i < clean.length; i += 2) {
+                                          bytes.push(clean.substring(i, i + 2));
+                                        }
+                                        while (bytes.length < 8) bytes.push("00");
+                                        return bytes.map((b, idx) => (
+                                          <span 
+                                            key={idx} 
+                                            className="bg-white border border-[#141414] px-1 font-bold hover:bg-[#141414] hover:text-white transition-all text-[9.5px]"
+                                            title={`Byte offset +${idx}: ${b}`}
+                                          >
+                                            {b}
+                                          </span>
+                                        ));
+                                      })()}
+                                    </div>
+                                    <span className="text-teal-700 bg-teal-100/30 px-1 font-bold text-[9px] rounded-sm border border-teal-200">
+                                      {(() => {
+                                        const clean = payload.alert.hexDumpValue.replace(/^0x/gi, '');
+                                        const bytes: string[] = [];
+                                        for (let i = 0; i < clean.length; i += 2) {
+                                          bytes.push(clean.substring(i, i + 2));
+                                        }
+                                        while (bytes.length < 8) bytes.push("00");
+                                        return bytes.map(b => {
+                                          const num = parseInt(b, 16);
+                                          return (num >= 32 && num <= 126) ? String.fromCharCode(num) : ".";
+                                        }).join("");
+                                      })()}
+                                    </span>
+                                  </div>
+                                  <div className="border-t border-dashed border-[#141414]/20 pt-1 flex justify-between text-[8px] text-slate-500 font-bold overflow-hidden">
+                                    <span className="shrink-0 mr-1.5">Bit Vector:</span>
+                                    <span className="tracking-tight select-all truncate text-left text-slate-700">
+                                      {(() => {
+                                        const clean = payload.alert.hexDumpValue.replace(/^0x/gi, '');
+                                        const bytes: string[] = [];
+                                        for (let i = 0; i < clean.length; i += 2) {
+                                          bytes.push(clean.substring(i, i + 2));
+                                        }
+                                        while (bytes.length < 8) bytes.push("00");
+                                        return bytes.map(b => parseInt(b, 16).toString(2).padStart(8, '0')).join(" ");
+                                      })()}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -1845,6 +2146,80 @@ export function TelemetrySimulator({
                             <span className="col-span-8 text-slate-800 leading-normal font-sans text-xs">
                               {selectedPayload.matchedRegister.description}
                             </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Raw Binary Hex Dump */}
+                      <div className="space-y-2">
+                        <div className="text-[10px] text-slate-705 font-bold uppercase tracking-wider font-mono">
+                          Binary Diagnostics Hex Dump Record
+                        </div>
+                        <div className="bg-[#141414] border-2 border-[#141414] p-3 text-slate-200 font-mono text-[11px] shadow-[2px_2px_0px_#141414]">
+                          <div className="flex justify-between border-b border-neutral-800 pb-1 text-slate-400 text-[8px] uppercase font-black">
+                            <span>Offset Addr</span>
+                            <span>Hex Buffer Frame representation</span>
+                            <span>ASCII</span>
+                          </div>
+                          
+                          <div className="flex justify-between items-center py-2 border-b border-dashed border-neutral-850">
+                            <span className="text-blue-400 font-bold font-mono">0x0000_0000</span>
+                            <div className="flex gap-1">
+                              {(() => {
+                                const clean = selectedPayload.alert.hexDumpValue.replace(/^0x/gi, '');
+                                const bytes: string[] = [];
+                                for (let i = 0; i < clean.length; i += 2) {
+                                  bytes.push(clean.substring(i, i + 2));
+                                }
+                                while (bytes.length < 8) bytes.push("00");
+                                return bytes.map((b, idx) => (
+                                  <span 
+                                    key={idx} 
+                                    className="bg-neutral-800 text-white font-black border border-neutral-700 px-1 rounded-sm text-[10.5px]"
+                                    title={`Byte offset +${idx}: 0x${b}`}
+                                  >
+                                    {b}
+                                  </span>
+                                ));
+                              })()}
+                            </div>
+                            <span className="bg-neutral-800 text-emerald-400 border border-neutral-700 px-1 py-0.5 rounded-sm text-[9.5px] font-bold">
+                              {(() => {
+                                const clean = selectedPayload.alert.hexDumpValue.replace(/^0x/gi, '');
+                                const bytes: string[] = [];
+                                for (let i = 0; i < clean.length; i += 2) {
+                                  bytes.push(clean.substring(i, i + 2));
+                                }
+                                while (bytes.length < 8) bytes.push("00");
+                                return bytes.map(b => {
+                                  const num = parseInt(b, 16);
+                                  return (num >= 32 && num <= 126) ? String.fromCharCode(num) : "·";
+                                }).join("");
+                              })()}
+                            </span>
+                          </div>
+
+                          <div className="pt-2 text-[8.5px] text-slate-400 flex flex-col space-y-1">
+                            <div className="flex justify-between">
+                              <span className="uppercase text-slate-500 font-black">Bit Vector Frame</span>
+                              <span className="text-right text-indigo-400 font-bold tracking-tighter">
+                                {(() => {
+                                  const clean = selectedPayload.alert.hexDumpValue.replace(/^0x/gi, '');
+                                  const bytes: string[] = [];
+                                  for (let i = 0; i < clean.length; i += 2) {
+                                    bytes.push(clean.substring(i, i + 2));
+                                  }
+                                  while (bytes.length < 8) bytes.push("00");
+                                  return bytes.map(b => parseInt(b, 16).toString(2).padStart(8, '0')).join(" ");
+                                })()}
+                              </span>
+                            </div>
+                            <div className="flex justify-between border-t border-neutral-850 pt-1">
+                              <span className="uppercase text-slate-500 font-black font-semibold">Intercept Hex Identifier</span>
+                              <span className="text-emerald-400 text-right select-all font-bold">
+                                {selectedPayload.alert.hexDumpValue}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -2236,7 +2611,7 @@ export function TelemetrySimulator({
 
             {/* Modal Footer */}
             <div className="bg-[#141414]/5 p-4 border-t-4 border-[#141414] flex flex-col sm:flex-row justify-between items-center gap-2 text-xs font-mono">
-              <div className="text-slate-500 text-[10px]">
+              <div className="text-slate-550 text-[10px]">
                 Target Integration Platform: M365 Copilot Studio v1.5 API Schema compliant.
               </div>
               <button
@@ -2250,6 +2625,44 @@ export function TelemetrySimulator({
           </div>
         </div>
       )}
+
+      {/* Toast Notification Container */}
+      <div className="fixed bottom-5 right-5 z-50 max-w-sm space-y-2 pointer-events-none font-mono">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`pointer-events-auto border-4 border-[#141414] p-3 shadow-[4px_4px_0px_rgba(0,0,0,1)] flex items-start space-x-2.5 transition-all bg-white ${
+              toast.type === "error"
+                ? "bg-red-50 text-red-950"
+                : toast.type === "warning"
+                ? "bg-amber-50 text-amber-950"
+                : "bg-emerald-50 text-emerald-950"
+            }`}
+          >
+            <div className="shrink-0 mt-0.5">
+              {toast.type === "error" ? (
+                <ShieldAlert className="w-4 h-4 text-red-600" />
+              ) : toast.type === "warning" ? (
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-extrabold uppercase tracking-tight text-[10px] mb-0.5">
+                {toast.type === "error" ? "CRITICAL BREACH ATTEMPT" : toast.type === "warning" ? "COMPLIANCE BREACH WARNING" : "SYSTEM NOTIFICATION"}
+              </div>
+              <p className="leading-snug text-[9px]">{toast.message}</p>
+            </div>
+            <button
+              onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
+              className="text-[10px] font-black text-slate-400 hover:text-[#141414] shrink-0 px-1 hover:bg-slate-200"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
