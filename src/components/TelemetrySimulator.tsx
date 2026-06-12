@@ -177,6 +177,12 @@ export function TelemetrySimulator({
     { time: "0s (now)", frequency: 0, severity: 0 },
   ]);
 
+  // Auto-Refresh Poller states
+  const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
+  const [lastRefreshTime, setLastRefreshTime] = useState<string>(new Date().toLocaleTimeString());
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [copiedLogIndex, setCopiedLogIndex] = useState<number | null>(null);
+
   // Handle rolling metrics chart timer (shifts every 10 seconds)
   useEffect(() => {
     const interval = setInterval(() => {
@@ -193,6 +199,153 @@ export function TelemetrySimulator({
     }, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  // Deterministic calculation for simulated resolution time in hours
+  const getLogResolutionTime = (payload: DiagnosticsPayload): number | null => {
+    if (payload.complianceStatus === "SECURITY_VIOLATION_BLOCKED") return null;
+    
+    // Base resolution time is based on SLA's threshold hours
+    const baseSlaHours = payload.slaMatched?.responseTimeThresholdHours || 8;
+    
+    // Hash based on device id and error code to keep it deterministic per log
+    const hashStr = (payload.alert.deviceId + payload.alert.registerErrorCode);
+    let hash = 0;
+    for (let i = 0; i < hashStr.length; i++) {
+      hash = (hash << 5) - hash + hashStr.charCodeAt(i);
+      hash |= 0; // Convert to 32bit integer
+    }
+    const absoluteHash = Math.abs(hash);
+    
+    // Percentage between 0.35 and 0.85 of SLA limit
+    const percentage = 0.35 + (absoluteHash % 50) / 100;
+    return Number((baseSlaHours * percentage).toFixed(1));
+  };
+
+  const getSeverityInfo = (payload: DiagnosticsPayload) => {
+    const status = payload.complianceStatus;
+    if (status === "SECURITY_VIOLATION_BLOCKED" || status === "CRITICAL_SYS_THRESHOLD_EXCEEDED" || payload.alert.registerErrorCode === "0xERR_OVR") {
+      return { 
+        label: "Critical", 
+        badgeClass: "bg-red-100 text-red-800 border-red-300 animate-pulse font-extrabold" 
+      };
+    }
+    if (status === "OUT_OF_WARRANTY_COMPLIANCE" || payload.alert.registerErrorCode === "0xERR_A4F") {
+      return { 
+        label: "Warning", 
+        badgeClass: "bg-amber-100 text-amber-800 border-amber-300 font-bold" 
+      };
+    }
+    return { 
+      label: "Info", 
+      badgeClass: "bg-blue-100 text-blue-800 border-blue-300 font-medium" 
+    };
+  };
+
+  // CSV Parser to parse logs on CSV upload
+  const parseCsvToLogArray = (csvText: string): any[] => {
+    const lines = csvText.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
+    if (lines.length < 2) return [];
+
+    // Simple header parsing
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+    const items: any[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      const values = line.split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
+      if (values.length < headers.length) continue;
+
+      const item: any = {};
+      headers.forEach((header, index) => {
+        let val = values[index];
+        if (!val) return;
+        if (header === "temperature" || header === "voltage" || header === "errorRate") {
+          const num = Number(val);
+          if (!isNaN(num)) {
+            item[header] = num;
+          }
+        } else {
+          item[header] = val;
+        }
+      });
+      items.push(item);
+    }
+    return items;
+  };
+
+  const loadSampleCsvBatch = () => {
+    const csvContent = [
+      "deviceId,nodeTenantId,registerErrorCode,hexDumpValue,telemetryTimestamp,temperature,voltage,errorRate",
+      `CPU-INTEL-SK-10,${activeTenant},0xERR_77B,0x12FAECAB99D2,${new Date(Date.now() - 360000).toISOString()},65,1.2,0.01`,
+      `GPU-AMD-RYZ88,${activeTenant},0xERR_A4F,0xff88cc22bba9,${new Date(Date.now() - 240000).toISOString()},82,1.35,0.04`,
+      `FPGA-XIL-ACC-4,${activeTenant === "TENANT-ALPHA" ? "TENANT-BETA" : "TENANT-ALPHA"},0xERR_F8C,0x112233445566,${new Date(Date.now() - 120000).toISOString()},55,1.1,0.0`
+    ].join("\n");
+    
+    const parsed = parseCsvToLogArray(csvContent);
+    setBatchRawJson(JSON.stringify(parsed, null, 2));
+    addTrace("[BATCH SYSTEM] Preloaded sample CSV formatted data and translated to log payload stream template.");
+  };
+
+  // Dynamic Trend Chart computation for selected tenant
+  const computeActiveTenantChartData = () => {
+    const tenantLogs = processedLogs.filter(p => p.alert.nodeTenantId === activeTenant);
+    const timeMap: { [time: string]: { total: number; critical: number; warning: number } } = {};
+    
+    tenantLogs.forEach(log => {
+      try {
+        const date = new Date(log.alert.telemetryTimestamp);
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        const timeStr = `${hours}:${minutes}:${seconds}`;
+        
+        const isCritical = log.complianceStatus === "SECURITY_VIOLATION_BLOCKED" || log.complianceStatus === "CRITICAL_SYS_THRESHOLD_EXCEEDED" || log.alert.registerErrorCode === "0xERR_OVR";
+        const isWarning = log.complianceStatus === "OUT_OF_WARRANTY_COMPLIANCE" || log.alert.registerErrorCode === "0xERR_A4F";
+        
+        if (!timeMap[timeStr]) {
+          timeMap[timeStr] = { total: 0, critical: 0, warning: 0 };
+        }
+        timeMap[timeStr].total++;
+        if (isCritical) timeMap[timeStr].critical++;
+        if (isWarning) timeMap[timeStr].warning++;
+      } catch (e) {
+        // ignore
+      }
+    });
+
+    const sortedTimes = Object.keys(timeMap).sort().slice(-10);
+    if (sortedTimes.length === 0) {
+      return [
+        { time: new Date().toLocaleTimeString(), errors: 0, critical: 0, warning: 0 }
+      ];
+    }
+
+    return sortedTimes.map(time => ({
+      time,
+      errors: timeMap[time].total,
+      critical: timeMap[time].critical,
+      warning: timeMap[time].warning
+    }));
+  };
+
+  // Auto-Refresh Poller (real-time polling simulation)
+  useEffect(() => {
+    let pollInterval: any;
+    if (autoRefresh) {
+      pollInterval = setInterval(() => {
+        setIsRefreshing(true);
+        setTimeout(() => setIsRefreshing(false), 800);
+        
+        // Polles telemetry endpoint
+        processNextLog();
+        setLastRefreshTime(new Date().toLocaleTimeString());
+        addTrace(`[AUTO-POLL] Periodically polled telemetry endpoint. Retreived and processed edge event frame.`);
+      }, 5000);
+    }
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [autoRefresh, streamIndex, activeTenant, logs]);
 
   // Export current session logs stream function
   const exportLogStream = () => {
@@ -722,6 +875,45 @@ export function TelemetrySimulator({
 
   return (
     <div className="space-y-6 select-text">
+      {/* Real-time Simulator Panel Header */}
+      <div className="bg-white border-4 border-[#141414] p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-[4px_4px_0px_#141414]">
+        <div className="flex items-center space-x-3">
+          <div className="bg-emerald-500 border-2 border-[#141414] p-2 text-white">
+            <RefreshCw className={`w-5 h-5 ${autoRefresh ? "animate-spin" : ""}`} />
+          </div>
+          <div>
+            <h2 className="text-xs font-black text-[#141414] uppercase tracking-wider font-mono">
+              VektorOps Telemetry Edge Pipeline Simulator
+            </h2>
+            <p className="text-[10px] text-slate-500 font-mono">
+              Status: <span className="text-emerald-600 font-bold uppercase">{autoRefresh ? "Polling Endpoint" : "Idle"}</span> | Last Poll: {lastRefreshTime}
+            </p>
+          </div>
+        </div>
+
+        {/* Auto-Refresh Control Switch */}
+        <div className="flex items-center space-x-3 bg-slate-50 border-2 border-[#141414] px-3 py-2">
+          <span className="text-[10px] uppercase font-mono font-black text-slate-700 flex items-center gap-1.5">
+            <RefreshCw className={`w-3.5 h-3.5 text-blue-600 ${isRefreshing ? "animate-spin" : ""}`} />
+            Endpoint Auto-Poll (5s)
+          </span>
+          <button
+            onClick={() => {
+              setAutoRefresh(!autoRefresh);
+              addTrace(`[AUTO-POLL] User changed polling state: ${!autoRefresh ? "STARTED" : "STOPPED"}`);
+            }}
+            className={`text-[9px] px-2 py-1 font-mono font-black uppercase transition border flex items-center gap-1.5 cursor-pointer ${
+              autoRefresh
+                ? "bg-emerald-600 text-white border-black shadow-[1.5px_1.5px_0px_rgba(0,0,0,1)] hover:translate-x-[0.5px] hover:translate-y-[0.5px] hover:shadow-none"
+                : "bg-white text-slate-705 border-slate-300 hover:border-black"
+            }`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${autoRefresh ? "bg-white animate-pulse" : "bg-slate-400"}`}></span>
+            {autoRefresh ? "Polling" : "Off"}
+          </button>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
       {/* Simulation Console Controls (Left hand) */}
       <div className="xl:col-span-4 flex flex-col space-y-6">
@@ -1073,6 +1265,69 @@ export function TelemetrySimulator({
 
           {middleTab === "queue" ? (
             <div className="flex-1 flex flex-col min-h-0 space-y-2">
+              {(() => {
+                const activeTenantLogs = processedLogs.filter(p => p.alert.nodeTenantId === activeTenant);
+                const activeTenantNonBlockedLogs = activeTenantLogs.filter(p => p.complianceStatus !== "SECURITY_VIOLATION_BLOCKED");
+                
+                const totalErrorsForTenant = activeTenantLogs.length;
+                const criticalCount = activeTenantLogs.filter(p => {
+                  const status = p.complianceStatus;
+                  return status === "SECURITY_VIOLATION_BLOCKED" || status === "CRITICAL_SYS_THRESHOLD_EXCEEDED" || p.alert.registerErrorCode === "0xERR_OVR";
+                }).length;
+                const warningCount = activeTenantLogs.filter(p => {
+                  const status = p.complianceStatus;
+                  return status === "OUT_OF_WARRANTY_COMPLIANCE" || p.alert.registerErrorCode === "0xERR_A4F";
+                }).length;
+
+                let avgResolutionTimeText = "N/A";
+                if (activeTenantNonBlockedLogs.length > 0) {
+                  const sum = activeTenantNonBlockedLogs.reduce((acc, log) => {
+                    const resTime = getLogResolutionTime(log);
+                    return acc + (resTime ?? 0);
+                  }, 0);
+                  avgResolutionTimeText = (sum / activeTenantNonBlockedLogs.length).toFixed(1) + " hrs";
+                }
+
+                return (
+                  <div className="bg-slate-50 border-2 border-[#141414] p-2.5 font-mono text-xs space-y-1.5 shadow-[2px_2px_0px_#141414] mb-1">
+                    <div className="flex items-center justify-between border-b border-[#141414] pb-1">
+                      <span className="text-[10px] font-black text-slate-700 uppercase tracking-tight flex items-center gap-1">
+                        <Server className="w-3.5 h-3.5 text-blue-650" />
+                        {activeTenant} Analytics Summary
+                      </span>
+                      <span className="text-[9px] bg-[#141414] text-white px-1.5 py-0.2 rounded font-black font-mono">
+                        SCOPE: ACTIVE
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-center">
+                      <div className="bg-white border border-[#141414] p-1.5 shadow-[1px_1px_0px_rgba(0,0,0,1)] flex flex-col justify-between">
+                        <span className="text-[8px] text-slate-500 uppercase font-black tracking-wider block">
+                          Total Errors
+                        </span>
+                        <div className="flex items-baseline justify-center space-x-1 mt-0.5">
+                          <span className="text-sm font-black text-[#141414]">
+                            {totalErrorsForTenant}
+                          </span>
+                          {totalErrorsForTenant > 0 && (
+                            <span className="text-[8px] font-bold text-red-600 block pl-1">
+                              ({criticalCount} Crit, {warningCount} Warn)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="bg-white border border-[#141414] p-1.5 shadow-[1px_1px_0px_rgba(0,0,0,1)] flex flex-col justify-between">
+                        <span className="text-[8px] text-slate-500 uppercase font-black tracking-wider block">
+                          Avg. Res. Time
+                        </span>
+                        <span className="text-sm font-black text-slate-800 mt-0.5 block">
+                          {avgResolutionTimeText}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Search filter input */}
               <div className="relative">
                 <input
@@ -1110,10 +1365,10 @@ export function TelemetrySimulator({
                                        selectedPayload?.alert.telemetryTimestamp === payload.alert.telemetryTimestamp;
 
                     return (
-                      <button
+                      <div
                         key={index}
                         onClick={() => setSelectedPayload(payload)}
-                        className={`w-full text-left p-3 border-2 transition-all flex items-start space-x-3 rounded-none ${
+                        className={`w-full text-left p-3 border-2 transition-all flex items-start space-x-3 rounded-none cursor-pointer ${
                           isSelected 
                             ? isViolation 
                               ? "bg-red-55 border-red-600 ring-2 ring-red-650"
@@ -1143,41 +1398,79 @@ export function TelemetrySimulator({
                         
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-1">
-                            <span className={`font-mono text-xs font-extrabold tracking-tight ${isOverflow ? "text-purple-700" : "text-[#141414]"}`}>
-                              {payload.alert.registerErrorCode}
-                            </span>
-                            <span className="text-[9px] text-slate-500">
+                            <div className="flex items-center space-x-1.5 min-w-0">
+                              <span className={`font-mono text-xs font-extrabold tracking-tight shrink-0 ${isOverflow ? "text-purple-700" : "text-[#141414]"}`}>
+                                {payload.alert.registerErrorCode}
+                              </span>
+                              {(() => {
+                                const sev = getSeverityInfo(payload);
+                                return (
+                                  <span className={`text-[8px] font-mono px-1 py-[1px] border shrink-0 rounded uppercase tracking-wider ${sev.badgeClass}`}>
+                                    {sev.label}
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                            <span className="text-[9px] text-slate-500 font-mono">
                               {new Date(payload.alert.telemetryTimestamp).toLocaleTimeString()}
                             </span>
                           </div>
                           <p className="text-xs text-slate-700 font-mono truncate">{payload.alert.deviceId}</p>
                           
-                          <div className="flex items-center space-x-2 mt-1.5">
-                            <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${
-                              isViolation 
-                                ? "bg-red-600 text-white border-[#141414]"
-                                : isOverflow
-                                ? "bg-purple-600 text-white border-purple-600"
-                                : "bg-[#141414] text-white border-[#141414]"
-                            }`}>
-                              {payload.alert.nodeTenantId}
-                            </span>
-                            <span className="text-[10px] text-slate-500">
-                              {payload.processingTimeMs.toFixed(1)} μs
-                            </span>
-                            {payload.complianceStatus === "CRITICAL_SYS_THRESHOLD_EXCEEDED" && (
-                              <span className="text-[8px] bg-orange-100 text-orange-700 font-bold border border-orange-300 px-1 py-0.1 font-mono rounded uppercase animate-pulse">
-                                Limit Exceeded
+                          <div className="flex items-center justify-between mt-1.5 flex-wrap gap-2">
+                            <div className="flex items-center space-x-2">
+                              <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${
+                                isViolation 
+                                  ? "bg-red-600 text-white border-[#141414]"
+                                  : isOverflow
+                                  ? "bg-purple-600 text-white border-purple-600"
+                                  : "bg-[#141414] text-white border-[#141414]"
+                              }`}>
+                                {payload.alert.nodeTenantId}
                               </span>
-                            )}
-                            {isOverflow && (
-                              <span className="text-[8px] bg-purple-100 text-purple-750 font-bold border border-purple-300 px-1 py-0.1 font-mono rounded uppercase">
-                                Overflow Alert
+                              <span className="text-[10px] text-slate-500 font-mono">
+                                {payload.processingTimeMs.toFixed(1)} μs
                               </span>
-                            )}
+                              {payload.complianceStatus === "CRITICAL_SYS_THRESHOLD_EXCEEDED" && (
+                                <span className="text-[8px] bg-orange-100 text-orange-700 font-bold border border-orange-300 px-1 py-0.1 font-mono rounded uppercase animate-pulse">
+                                  Limit Exceeded
+                                </span>
+                              )}
+                              {isOverflow && (
+                                <span className="text-[8px] bg-purple-100 text-purple-750 font-bold border border-purple-300 px-1 py-0.1 font-mono rounded uppercase">
+                                  Overflow Alert
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Copy JSON Button */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+                                setCopiedLogIndex(index);
+                                addTrace(`[SIMULATOR] Copied telemetry JSON payload for device '${payload.alert.deviceId}'`);
+                                setTimeout(() => setCopiedLogIndex(null), 1500);
+                              }}
+                              className="text-[9px] px-1.5 py-0.5 font-mono font-bold uppercase transition border bg-slate-50 text-slate-705 border-slate-350 hover:border-black hover:bg-white flex items-center gap-1 cursor-pointer"
+                              title="Copy raw telemetry JSON payload"
+                            >
+                              {copiedLogIndex === index ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                  <span className="text-emerald-700 text-[8px]">Copied</span>
+                                </>
+                              ) : (
+                                <>
+                                  <FileJson className="w-3 h-3 text-indigo-650" />
+                                  <span>JSON</span>
+                                </>
+                              )}
+                            </button>
                           </div>
                         </div>
-                      </button>
+                      </div>
                     );
                   })
                 )}
@@ -1224,19 +1517,28 @@ export function TelemetrySimulator({
               )}
 
               <div className="space-y-2 text-xs">
-                <div className="flex justify-between items-center">
-                  <span className="text-[9px] text-slate-600 font-mono">Paste logs array or drop a JSON file:</span>
-                  <div className="space-x-1.5 font-mono text-[9px] flex items-center">
+                <div className="flex justify-between items-center flex-wrap gap-1 border-b border-dashed border-slate-200 pb-1.5 mb-1">
+                  <span className="text-[9px] text-slate-600 font-mono">Paste logs array or drop a JSON/CSV file:</span>
+                  <div className="space-x-1 font-mono text-[9px] flex items-center flex-wrap gap-1">
                     <button
                       type="button"
                       onClick={loadSampleBatch}
                       className="text-slate-705 underline focus:outline-none cursor-pointer font-bold"
                     >
-                      Load Sample
+                      Sample JSON
                     </button>
-                    <span className="text-slate-350">|</span>
-                    <label className="text-slate-705 underline focus:outline-none cursor-pointer font-bold">
-                      <span>Upload File</span>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={loadSampleCsvBatch}
+                      className="text-slate-705 underline focus:outline-none cursor-pointer font-bold"
+                    >
+                      Sample CSV
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <label className="text-slate-705 underline focus:outline-none cursor-pointer font-bold flex items-center space-x-0.5">
+                      <Upload className="w-2.5 h-2.5 inline" />
+                      <span>Upload JSON</span>
                       <input
                         type="file"
                         accept=".json"
@@ -1256,7 +1558,36 @@ export function TelemetrySimulator({
                         }}
                       />
                     </label>
-                    <span className="text-slate-350">|</span>
+                    <span className="text-slate-300">|</span>
+                    <label className="text-slate-705 underline focus:outline-none cursor-pointer font-bold flex items-center space-x-0.5">
+                      <Upload className="w-2.5 h-2.5 inline" />
+                      <span>Upload CSV</span>
+                      <input
+                        type="file"
+                        accept=".csv"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                              if (event.target && typeof event.target.result === "string") {
+                                const csvText = event.target.result;
+                                const items = parseCsvToLogArray(csvText);
+                                if (items.length === 0) {
+                                  addTrace(`[BATCH SYSTEM] [ERROR] Loaded CSV file '${file.name}' but could not parse any valid rows. Ensure headers are: deviceId, nodeTenantId, registerErrorCode, hexDumpValue, telemetryTimestamp`);
+                                  return;
+                                }
+                                setBatchRawJson(JSON.stringify(items, null, 2));
+                                addTrace(`[BATCH SYSTEM] Loaded and parsed CSV successfully: ${file.name} (${items.length} records parsed to JSON).`);
+                              }
+                            };
+                            reader.readAsText(file);
+                          }
+                        }}
+                      />
+                    </label>
+                    <span className="text-slate-300">|</span>
                     <button
                       type="button"
                       onClick={() => setBatchRawJson("")}
@@ -1285,8 +1616,19 @@ export function TelemetrySimulator({
                       const reader = new FileReader();
                       reader.onload = (event) => {
                         if (event.target && typeof event.target.result === "string") {
-                          setBatchRawJson(event.target.result);
-                          addTrace(`[BATCH SYSTEM] Loaded JSON file content: ${file.name} (${file.size} bytes).`);
+                          const fileContent = event.target.result;
+                          if (file.name.endsWith(".csv")) {
+                            const parsed = parseCsvToLogArray(fileContent);
+                            if (parsed.length === 0) {
+                              addTrace(`[BATCH SYSTEM] [ERROR] Dropped CSV file '${file.name}' but could not parse any valid rows.`);
+                              return;
+                            }
+                            setBatchRawJson(JSON.stringify(parsed, null, 2));
+                            addTrace(`[BATCH SYSTEM] Dropped and parsed CSV successfully: ${file.name} (${parsed.length} records parsed to JSON).`);
+                          } else {
+                            setBatchRawJson(fileContent);
+                            addTrace(`[BATCH SYSTEM] Loaded JSON file content: ${file.name} (${file.size} bytes).`);
+                          }
                         }
                       };
                       reader.readAsText(file);
@@ -1666,6 +2008,77 @@ export function TelemetrySimulator({
                 dataKey="severity" 
                 stroke="#d97706" 
                 strokeWidth={3} 
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Selected Tenant Error Frequency Trend Chart */}
+      <div className="bg-white border-4 border-[#141414] p-5 shadow-[4px_4px_0px_#141414]">
+        <div className="flex items-center justify-between border-b-2 border-[#141414] pb-3 mb-4">
+          <div className="flex items-center space-x-2.5">
+            <Activity className="w-5 h-5 text-purple-650" />
+            <h3 className="font-extrabold text-[#141414] text-xs font-mono tracking-wider uppercase">
+              Tenant Incident Frequency Trend ({activeTenant})
+            </h3>
+          </div>
+          <div className="text-[10px] bg-purple-600 text-white px-2.5 py-0.5 border border-black font-bold font-mono">
+            Tenant Isolated View
+          </div>
+        </div>
+
+        <div className="h-[220px] w-full font-mono text-[10px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={computeActiveTenantChartData()}
+              margin={{ top: 10, right: 20, left: -20, bottom: 0 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+              <XAxis 
+                dataKey="time" 
+                stroke="#141414"
+                tick={{ fill: '#141414', fontSize: 10, fontWeight: 'bold' }}
+              />
+              <YAxis 
+                stroke="#141414" 
+                tick={{ fill: '#141414', fontSize: 10, fontWeight: 'bold' }}
+                allowDecimals={false}
+              />
+              <Tooltip 
+                contentStyle={{ 
+                  backgroundColor: '#141414', 
+                  color: '#fff', 
+                  border: '2px solid #141414',
+                  fontFamily: 'monospace'
+                }} 
+              />
+              <Legend 
+                wrapperStyle={{ fill: '#141414', fontSize: 11, fontWeight: 'bold' }}
+              />
+              <Line 
+                name="Incident Log Frequency" 
+                type="monotone" 
+                dataKey="errors" 
+                stroke="#8b5cf6" 
+                strokeWidth={3} 
+                activeDot={{ r: 8 }} 
+              />
+              <Line 
+                name="Critical Escalation Alerts" 
+                type="monotone" 
+                dataKey="critical" 
+                stroke="#ef4444" 
+                strokeWidth={2} 
+                strokeDasharray="4 4"
+              />
+              <Line 
+                name="Warning Compliance Alerts" 
+                type="monotone" 
+                dataKey="warning" 
+                stroke="#f59e0b" 
+                strokeWidth={2} 
+                strokeDasharray="2 2"
               />
             </LineChart>
           </ResponsiveContainer>
