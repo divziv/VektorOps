@@ -197,6 +197,16 @@ VektorOps demonstrates how structured agent systems can:
 * Bridge low-level telemetry with enterprise workflows
 
 ---
+# 📸 Product Screens
+<img width="1887" height="842" alt="VektorOps-S1" src="https://github.com/user-attachments/assets/eac67e48-a65e-4265-ac08-7774c23278d1" />
+<img width="1102" height="678" alt="VektorOps-S2" src="https://github.com/user-attachments/assets/b3e5fbd2-17f7-439d-b1b8-929307dd6224" />
+<img width="835" height="622" alt="VektorOps-S3" src="https://github.com/user-attachments/assets/4d94ea8f-7148-45cc-b328-41955ff6342c" />
+<img width="1073" height="596" alt="VektorOps-S4" src="https://github.com/user-attachments/assets/99756099-e6c4-473d-810b-a0375afa3331" />
+<img width="1913" height="825" alt="VektorOps-S5" src="https://github.com/user-attachments/assets/fdbc852e-d1aa-40d2-a45b-2b44ab0db606" />
+<img width="1897" height="836" alt="VektorOps-S6" src="https://github.com/user-attachments/assets/1004ad73-dba3-4fd9-932f-41b562acd380" />
+<img width="1890" height="811" alt="VektorOps-S7" src="https://github.com/user-attachments/assets/5a47e7de-266f-4f2e-8abb-5ea77c5dd151" />
+<img width="846" height="647" alt="VektorOps-S8" src="https://github.com/user-attachments/assets/122f6fe3-0bd5-458a-8d45-e2659d17e62b" />
+
 
 # 🏅 Microsoft Agents League Hackathon 2026
 
